@@ -1,0 +1,7 @@
+[package]
+name = "RadarMonitor"
+version = "0.1.0"
+authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
+
+[dependencies]
+ftp = "*"
