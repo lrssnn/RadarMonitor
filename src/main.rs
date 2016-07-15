@@ -10,8 +10,10 @@ use std::thread::sleep;
 use std::time::Duration;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
-// Returns whether or not the operation was successful
+// Returns whether or not any files were downloaded.
 fn save_files() -> bool {
+
+    let mut downloads = false;
 
     // Connect to the server
     let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21"){
@@ -60,12 +62,14 @@ fn save_files() -> bool {
 
 	    // Write the file
 	    file.write_all(remote_file.into_inner().as_slice());
+
+	    downloads = true;
     }
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
 
-    true
+    downloads
 }
 
 fn correct_code_filter(name: &String) -> bool {
@@ -73,16 +77,35 @@ fn correct_code_filter(name: &String) -> bool {
 }
 
 fn main() {
-   save_files();
-/*
-   let long = Duration::new(5,0);
-   let short = Duration::new(0, 5000);
 
    loop {
-   	println!("#########\n");
-	sleep(long);
-	save_file("anon/gen/radar", "IDR043
+	while !save_files(){
+	    println!("No new files");
+	    wait_mins(1, true);
+	}
+        wait_mins(3, true);
     }
-    */
 }
 
+fn wait_mins(mut mins: u8, verbose: bool){
+    let ten_sec = Duration::new(10, 0);
+    loop {
+        if verbose {
+            print!("{}", mins);
+	    std::io::stdout().flush();
+	}
+	for i in 0..6 {
+	    sleep(ten_sec);
+	    if verbose {
+	        print!(".");
+	        std::io::stdout().flush();
+	    }
+	}
+	mins -= 1;
+	if mins == 0 {
+            if verbose {println!("0")};
+	    return;
+	}
+
+    }	
+}
