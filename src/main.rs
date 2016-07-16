@@ -9,6 +9,13 @@ use std::fs::File;
 use std::thread::sleep;
 use std::time::Duration;
 
+const DOWNLOAD_FOLDER: &'static str = "img/";
+// TODO:
+// Need to use this in order to delete older files.
+// To do this, will need to figure out a way to list the directory again.
+// Should be easier because we aren't doing comparisons
+const IMAGES_KEPT: usize = 10;
+
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
 fn save_files() -> bool {
@@ -46,7 +53,7 @@ fn save_files() -> bool {
 
     	    // Check if the file already exists locally.
 	    // Open will return an error if it does not exist, so err = good.
-	    match File::open(&file_name){
+	    match File::open(DOWNLOAD_FOLDER.to_string() + &file_name){
                 Ok(_) => continue,
 		Err(_) => println!("Choosing to download '{}'", file_name)
 	    };
@@ -58,7 +65,7 @@ fn save_files() -> bool {
 	    };
 
 	    // Create a new file locally (overwriting if already exists)
-	    let mut file = File::create(&file_name).ok().unwrap();
+	    let mut file = File::create(DOWNLOAD_FOLDER.to_string() + &file_name).ok().unwrap();
 
 	    // Write the file
 	    file.write_all(remote_file.into_inner().as_slice());
