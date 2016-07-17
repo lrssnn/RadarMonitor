@@ -1,4 +1,5 @@
 extern crate ftp;
+extern crate sfml;
 
 use std::str;
 use ftp::FtpStream;
@@ -8,6 +9,18 @@ use std::fs::File;
 
 use std::thread::sleep;
 use std::time::Duration;
+use std::time::SystemTime;
+
+use sfml::graphics::{Color, RenderTarget, RenderWindow, Transformable};
+use sfml::window::{Key, VideoMode, event, window_style};
+
+use sfml::graphics::Texture;
+use sfml::graphics::Sprite;
+
+use std::iter::{Iterator, Cycle};
+use std::slice::Iter;
+
+use std::fs;
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
 // TODO:
@@ -18,7 +31,7 @@ const IMAGES_KEPT: usize = 10;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
-fn save_files() -> bool {
+fn save_files(textures: &mut Vec<Texture>) -> bool {
 
     let mut downloads = false;
 
@@ -71,6 +84,9 @@ fn save_files() -> bool {
 	    file.write_all(remote_file.into_inner().as_slice());
 
 	    downloads = true;
+
+	    //Add the new file to the texture list
+	    textures.push(Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + &file_name)).unwrap());
     }
 
     // Disconnect from the server
@@ -82,8 +98,8 @@ fn save_files() -> bool {
 fn correct_code_filter(name: &String) -> bool {
     name.contains("IDR043") && !name.contains(".gif")
 }
-
-fn main() {
+/*
+fn main2() {
 
    loop {
 	while !save_files(){
@@ -93,6 +109,7 @@ fn main() {
         wait_mins(3, true);
     }
 }
+*/
 
 fn wait_mins(mut mins: u8, verbose: bool){
     let ten_sec = Duration::new(10, 0);
@@ -115,4 +132,58 @@ fn wait_mins(mut mins: u8, verbose: bool){
 	}
 
     }	
+}
+
+fn main() {
+    let mut textures: Vec<Texture> =  vec!();
+
+    let mut window = RenderWindow::new(VideoMode::new_init(800, 600, 32),
+                                       "Image Viewer",
+                                       window_style::CLOSE,
+                                       &Default::default())
+        .unwrap();
+    window.set_vertical_sync_enabled(true);
+
+    let mut next_index: usize = 0;
+
+
+    let mut sprite = Sprite::new().unwrap();
+
+    save_files(&mut textures);
+    let mut last_check = SystemTime::now();
+    
+    loop {
+        for event in window.events() {
+            match event {
+                event::Closed => return,
+                event::KeyPressed { code: Key::Escape, .. } => return,
+                event::KeyPressed { code: Key::Right, .. } => move_sprite(&mut sprite, 5.0, 0.0),
+                event::KeyPressed { code: Key::Left, .. } => move_sprite(&mut sprite,-5.0, 0.0),
+                event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut sprite, 0.0, -5.0),
+                event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut sprite, 0.0, 5.0),
+                event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
+                _ => {}
+            }
+        }
+
+        window.clear(&Color::black());
+        window.draw(&sprite);
+        window.display();
+
+	if last_check.elapsed().unwrap().as_secs() > 3600 {
+	    save_files(&mut textures);
+	    last_check = SystemTime::now();
+	}
+    }
+}
+
+fn move_sprite(sprite: &mut Sprite, x: f32, y: f32){
+    sprite.move2f(x, y);
+}
+
+fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_texture: usize) -> usize{
+    sprite.set_texture(&images[next_texture], true);
+    
+    println!("next_texture: {} | len(): {}", next_texture, images.len());
+    if next_texture +1 < images.len() {return next_texture + 1;} else {return 0;}
 }
