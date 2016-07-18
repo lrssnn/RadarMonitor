@@ -151,9 +151,9 @@ fn main() {
 
     // Create a tuple representing the currently displayed image. Represents (name, texture)
     // where texture is the actual texture object which needs to be kept alive
-    let mut current_data: (String, Texture) = (String::new(), Texture::new(100,100).unwrap());
+    let mut current_data = (String::new(), Sprite::new().unwrap());
 
-    let mut sprite = Sprite::new().unwrap();
+    //let mut sprite = Sprite::new().unwrap();
 
     save_files(&mut textures);
     let mut last_check = SystemTime::now();
@@ -163,18 +163,18 @@ fn main() {
             match event {
                 event::Closed => return,
                 event::KeyPressed { code: Key::Escape, .. } => return,
-                event::KeyPressed { code: Key::Right, .. } => move_sprite(&mut sprite, 5.0, 0.0),
-                event::KeyPressed { code: Key::Left, .. } => move_sprite(&mut sprite,-5.0, 0.0),
-                event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut sprite, 0.0, -5.0),
-                event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut sprite, 0.0, 5.0),
+                event::KeyPressed { code: Key::Right, .. } => move_sprite(&mut current_data.1, 5.0, 0.0),
+                event::KeyPressed { code: Key::Left, .. } => move_sprite(&mut current_data.1,-5.0, 0.0),
+                event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut current_data.1, 0.0, -5.0),
+                event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut current_data.1, 0.0, 5.0),
                 //event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
-                event::KeyPressed { code: Key::Return, .. } => current_data = next_image(&mut sprite, current_data.0),
+                event::KeyPressed { code: Key::Return, .. } => current_data = next_image(&mut current_data.1, current_data.0),
                 _ => {}
             }
         }
 
         window.clear(&Color::black());
-        window.draw(&sprite);
+        window.draw(&current_data.1);
         window.display();
 
 	if last_check.elapsed().unwrap().as_secs() > 3600 {
@@ -198,7 +198,7 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_textur
 }
 */
 
-fn next_image(sprite: &mut Sprite, current_img: String) -> (String, Texture) {
+fn next_image<'a>(sprite: &mut Sprite, current_img: String) -> (String, Sprite<'a>) {
     //First pull in a list of all the images in the directory and order it
     let files = fs::read_dir("./img/").unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
@@ -225,7 +225,8 @@ fn next_image(sprite: &mut Sprite, current_img: String) -> (String, Texture) {
 
     //Set the texture
     let texture = Texture::new_from_file(&target).unwrap();
-    sprite.set_texture(&texture, true);
-    (target, texture)
+    //sprite.set_texture(&texture, true);
+    let sprite = Sprite::new_with_texture(&texture).unwrap();
+    (target, sprite)
 }
 
