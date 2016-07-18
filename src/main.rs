@@ -33,9 +33,6 @@ const DOWNLOAD_FOLDER: &'static str = "img/";
 // Should be easier because we aren't doing comparisons
 const IMAGES_KEPT: usize = 10;
 
-// I wish I didn't have to do this
-static mut texture: Option<Texture>;
-
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
 fn save_files(textures: &mut Vec<Texture>) -> bool {
@@ -152,8 +149,9 @@ fn main() {
         .unwrap();
     window.set_vertical_sync_enabled(true);
 
-    let mut current_img = String::new();
-
+    // Create a tuple representing the currently displayed image. Represents (name, texture)
+    // where texture is the actual texture object which needs to be kept alive
+    let mut current_data: (String, Texture) = (String::new(), Texture::new(100,100).unwrap());
 
     let mut sprite = Sprite::new().unwrap();
 
@@ -170,7 +168,7 @@ fn main() {
                 event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut sprite, 0.0, -5.0),
                 event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut sprite, 0.0, 5.0),
                 //event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
-                event::KeyPressed { code: Key::Return, .. } => current_img = next_image(&mut sprite, current_img),
+                event::KeyPressed { code: Key::Return, .. } => current_data = next_image(&mut sprite, current_data.0),
                 _ => {}
             }
         }
@@ -200,7 +198,7 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_textur
 }
 */
 
-fn next_image(sprite: &mut Sprite, current_img: String) -> String {
+fn next_image(sprite: &mut Sprite, current_img: String) -> (String, Texture) {
     //First pull in a list of all the images in the directory and order it
     let files = fs::read_dir("./img/").unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
@@ -208,24 +206,26 @@ fn next_image(sprite: &mut Sprite, current_img: String) -> String {
 
     //Iterate through the list until we find the filename we are currently displaying, and show the next
     let mut found = false;
+    let mut looped = true;
     let mut target = String::new();
-    for file_name in file_names {
+
+    for file_name in file_names.iter() {
         if found {
-	    target = file_name;
+	    target = file_name.clone();
+	    looped = false;
 	    break;
-	} else if file_name.eq(file_names.last().unwrap()) {
-	    target = file_names.first().unwrap().to_string();
 	} else if file_name.eq(&current_img) {
 	    found = true;
 	}
     }
 
-    //Set the texture
-    unsafe {
-	texture = Texture::new_from_file(&target);
-	sprite.set_texture(&texture.unwrap(), true);
+    if looped {
+        target = file_names.first().unwrap().to_string();
     }
 
-    target
+    //Set the texture
+    let texture = Texture::new_from_file(&target).unwrap();
+    sprite.set_texture(&texture, true);
+    (target, texture)
 }
 
