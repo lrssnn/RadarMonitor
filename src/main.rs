@@ -7,6 +7,8 @@ use ftp::FtpStream;
 use std::io::prelude::*;
 use std::fs::File;
 
+use std::string::String;
+
 use std::thread::sleep;
 use std::time::Duration;
 use std::time::SystemTime;
@@ -21,6 +23,8 @@ use std::iter::{Iterator, Cycle};
 use std::slice::Iter;
 
 use std::fs;
+use std::fs::DirEntry;
+use std::cmp::Ordering;
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
 // TODO:
@@ -28,6 +32,9 @@ const DOWNLOAD_FOLDER: &'static str = "img/";
 // To do this, will need to figure out a way to list the directory again.
 // Should be easier because we aren't doing comparisons
 const IMAGES_KEPT: usize = 10;
+
+// I wish I didn't have to do this
+static mut texture: Option<Texture>;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
@@ -135,6 +142,7 @@ fn wait_mins(mut mins: u8, verbose: bool){
 }
 
 fn main() {
+
     let mut textures: Vec<Texture> =  vec!();
 
     let mut window = RenderWindow::new(VideoMode::new_init(800, 600, 32),
@@ -144,7 +152,7 @@ fn main() {
         .unwrap();
     window.set_vertical_sync_enabled(true);
 
-    let mut next_index: usize = 0;
+    let mut current_img = String::new();
 
 
     let mut sprite = Sprite::new().unwrap();
@@ -161,7 +169,8 @@ fn main() {
                 event::KeyPressed { code: Key::Left, .. } => move_sprite(&mut sprite,-5.0, 0.0),
                 event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut sprite, 0.0, -5.0),
                 event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut sprite, 0.0, 5.0),
-                event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
+                //event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
+                event::KeyPressed { code: Key::Return, .. } => current_img = next_image(&mut sprite, current_img),
                 _ => {}
             }
         }
@@ -171,19 +180,52 @@ fn main() {
         window.display();
 
 	if last_check.elapsed().unwrap().as_secs() > 3600 {
-	    save_files(&mut textures);
+	    //save_files(&mut textures);
 	    last_check = SystemTime::now();
 	}
     }
 }
 
+
 fn move_sprite(sprite: &mut Sprite, x: f32, y: f32){
     sprite.move2f(x, y);
 }
 
+/*
 fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_texture: usize) -> usize{
     sprite.set_texture(&images[next_texture], true);
     
     println!("next_texture: {} | len(): {}", next_texture, images.len());
     if next_texture +1 < images.len() {return next_texture + 1;} else {return 0;}
 }
+*/
+
+fn next_image(sprite: &mut Sprite, current_img: String) -> String {
+    //First pull in a list of all the images in the directory and order it
+    let files = fs::read_dir("./img/").unwrap();
+    let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    file_names.sort();
+
+    //Iterate through the list until we find the filename we are currently displaying, and show the next
+    let mut found = false;
+    let mut target = String::new();
+    for file_name in file_names {
+        if found {
+	    target = file_name;
+	    break;
+	} else if file_name.eq(file_names.last().unwrap()) {
+	    target = file_names.first().unwrap().to_string();
+	} else if file_name.eq(&current_img) {
+	    found = true;
+	}
+    }
+
+    //Set the texture
+    unsafe {
+	texture = Texture::new_from_file(&target);
+	sprite.set_texture(&texture.unwrap(), true);
+    }
+
+    target
+}
+
