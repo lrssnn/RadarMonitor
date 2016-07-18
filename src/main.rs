@@ -26,6 +26,8 @@ use std::fs;
 use std::fs::DirEntry;
 use std::cmp::Ordering;
 
+use std::boxed::Box;
+
 const DOWNLOAD_FOLDER: &'static str = "img/";
 // TODO:
 // Need to use this in order to delete older files.
@@ -151,7 +153,7 @@ fn main() {
 
     // Create a tuple representing the currently displayed image. Represents (name, texture)
     // where texture is the actual texture object which needs to be kept alive
-    let mut current_data = (String::new(), Sprite::new().unwrap());
+    let mut current_data = (String::new(), Sprite::new().unwrap(), Box::new(Texture::new(100, 100).unwrap()));
 
     //let mut sprite = Sprite::new().unwrap();
 
@@ -198,7 +200,7 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_textur
 }
 */
 
-fn next_image<'a>(sprite: &mut Sprite, current_img: String) -> (String, Sprite<'a>) {
+fn next_image<'a>(sprite: &mut Sprite, current_img: String) -> (String, Sprite<'a>, Box<Texture>) {
     //First pull in a list of all the images in the directory and order it
     let files = fs::read_dir("./img/").unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
@@ -224,9 +226,9 @@ fn next_image<'a>(sprite: &mut Sprite, current_img: String) -> (String, Sprite<'
     }
 
     //Set the texture
-    let texture = Texture::new_from_file(&target).unwrap();
+    let texture = Box::new(Texture::new_from_file(&target).unwrap());
     //sprite.set_texture(&texture, true);
     let sprite = Sprite::new_with_texture(&texture).unwrap();
-    (target, sprite)
+    (target, sprite, texture)
 }
 
