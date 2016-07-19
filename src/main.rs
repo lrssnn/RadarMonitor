@@ -30,6 +30,7 @@ use std::sync::Mutex;
 
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
+const LOCATION_CODE: &'static str = "IDR043";
 // TODO:
 // Need to use this in order to delete older files.
 // To do this, will need to figure out a way to list the directory again.
@@ -38,6 +39,8 @@ const IMAGES_KEPT: usize = 10;
 
 // Main function.
 fn main() {
+
+    init();
 
     save_files();
 
@@ -128,7 +131,7 @@ fn save_files() -> bool {
 }
 
 fn correct_code_filter(name: &String) -> bool {
-    name.contains("IDR043") && !name.contains(".gif")
+    name.contains(LOCATION_CODE) && !name.contains(".gif")
 }
 
 fn wait_mins(mut mins: u8, verbose: bool){
@@ -161,8 +164,12 @@ fn open_window(finish: &Arc<Mutex<bool>>){
 
     let mut last_frame = SystemTime::now();
     let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
-    let bg_texture = Texture::new_from_file("Test_Image.png").unwrap();
-    let background = Sprite::new_with_texture(&bg_texture).unwrap();
+
+    let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
+    let lc_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".locations.png")).unwrap();
+
+    let bg = Sprite::new_with_texture(&bg_texture).unwrap();
+    let lc = Sprite::new_with_texture(&lc_texture).unwrap();
 
     let mut window = RenderWindow::new(VideoMode::new_init(512, 512, 32),
                                         "Image Viewer",
@@ -180,7 +187,8 @@ fn open_window(finish: &Arc<Mutex<bool>>){
         }
 
 	window.clear(&Color::black());
-	//window.draw(&background);
+	window.draw(&bg);
+	window.draw(&lc);
 	window.draw(&sprite);
 	window.display();
 
@@ -212,3 +220,65 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_i
     index
 }
 
+// Save the radar background if it is not already present
+fn init() {
+
+    let background_file_name = &(LOCATION_CODE.to_string() + ".background.png");
+    let location_file_name = &(LOCATION_CODE.to_string() + ".locations.png");
+    // Check if the files are present
+    let mut missing = false;
+
+    match File::open(background_file_name){
+        Ok(_) => println!("Background file already exists: {}", background_file_name), 
+	Err(_) => missing = true
+    };
+    
+    match File::open(location_file_name){
+        Ok(_) => println!("Locations file already exists"),
+	Err(_) => missing = true
+    };
+
+    // Redownload if missing
+    if missing{
+        // Connect to the server
+        let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21"){
+    	    Ok(s) => s,
+	    Err(e) => {println!("Failed to connect to server: {}", e); return;}
+        };
+    
+        // Login anonymously
+        match ftp_stream.login("anonymous", "guest") {
+    	    Ok(_) => (),
+	    Err(e) => {println!("Failed to log in: {}", e); return;}
+        };
+    
+        // Change to the required directory
+        match ftp_stream.cwd("anon/gen/radar_transparencies"){
+    	    Ok(_) => (),
+	    Err(e) => {println!("Failed to navigate to directory: {}", e); return;}
+        };
+
+	// Get the files from the server
+	let background_file = match ftp_stream.simple_retr(&background_file_name){
+	    Ok(file) => file,
+	    Err(e) => {println!("Failed to get file: {}", e); return;}
+	};
+
+	let location_file = match ftp_stream.simple_retr(&location_file_name){
+	    Ok(file) => file,
+	    Err(e) => {println!("Failed to get file: {}", e); return;}
+	};
+
+	// Create a new file locally (overwriting if already exists)
+	let mut bg_file = File::create(background_file_name).ok().unwrap();
+	let mut lc_file = File::create(location_file_name).ok().unwrap();
+	
+	// Write the files
+	bg_file.write_all(background_file.into_inner().as_slice());
+	lc_file.write_all(location_file.into_inner().as_slice());
+
+        // Disconnect from the server
+        let _ = ftp_stream.quit();
+    }
+        
+}
