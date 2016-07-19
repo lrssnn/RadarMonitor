@@ -13,20 +13,21 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use sfml::graphics::{Color, RenderTarget, RenderWindow, Transformable};
-use sfml::window::{Key, VideoMode, event, window_style};
+use sfml::graphics::{Color, RenderTarget, RenderWindow};
+use sfml::window::{VideoMode, event, window_style};
 
 use sfml::graphics::Texture;
 use sfml::graphics::Sprite;
 
-use std::iter::{Iterator, Cycle};
-use std::slice::Iter;
+use std::iter::Iterator;
 
 use std::fs;
-use std::fs::DirEntry;
-use std::cmp::Ordering;
 
-use std::boxed::Box;
+use std::thread;
+
+use std::sync::Arc;
+use std::sync::Mutex;
+
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
 // TODO:
@@ -34,6 +35,34 @@ const DOWNLOAD_FOLDER: &'static str = "img/";
 // To do this, will need to figure out a way to list the directory again.
 // Should be easier because we aren't doing comparisons
 const IMAGES_KEPT: usize = 10;
+
+// Main function.
+fn main() {
+
+    save_files();
+
+    loop {
+
+	// Create a boolean variable which we will send to the child thread when it is time to terminate
+        let finish = Arc::new(Mutex::new(false));
+        // Cloning an Arc actually just gives us a new reference. We move this reference into the other thread
+	// but it points to the same boolean we have here.
+	let clone = finish.clone();
+	// Start the thread which displays the window
+        thread::spawn(move || {
+	    open_window(&clone);
+	});
+        // Wait for 5 minutes, then check the server every minute until we get at least 1 new file
+	wait_mins(5, true);
+	while !save_files() {
+	    wait_mins(1, true);
+	}
+        // Lock the mutex, then tell the other thread to finish, we will replace the window with a new one next iteration.
+	// Mutex is released implicitly when this loop scope ends.
+        let mut finish = finish.lock().unwrap();
+	*finish = true;
+    }
+}
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
@@ -109,7 +138,7 @@ fn wait_mins(mut mins: u8, verbose: bool){
             print!("{}", mins);
 	    std::io::stdout().flush();
 	}
-	for i in 0..6 {
+	for _ in 0..6 {
 	    sleep(ten_sec);
 	    if verbose {
 	        print!(".");
@@ -125,15 +154,8 @@ fn wait_mins(mut mins: u8, verbose: bool){
     }	
 }
 
-fn main() {
-
-    save_files();
-
-    open_window();
-}
-
 // Opens a new window, displaying only the files that currently exist in img
-fn open_window(){
+fn open_window(finish: &Arc<Mutex<bool>>){
     let textures = create_textures_from_files();
     let mut current_index = 0;
 
@@ -158,13 +180,18 @@ fn open_window(){
         }
 
 	window.clear(&Color::black());
-	window.draw(&background);
+	//window.draw(&background);
 	window.draw(&sprite);
 	window.display();
 
 	if last_frame.elapsed().unwrap().as_secs() >= 1{
 	    current_index = next_image(&mut sprite, &textures, current_index);
 	    last_frame = SystemTime::now();
+	}
+
+        let finish = finish.lock().unwrap();
+	if *finish {
+	    return;
 	}
     }
 }
