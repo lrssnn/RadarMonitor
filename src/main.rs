@@ -37,7 +37,7 @@ const IMAGES_KEPT: usize = 10;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
-fn save_files(textures: &mut Vec<Texture>) -> bool {
+fn save_files() -> bool {
 
     let mut downloads = false;
 
@@ -90,9 +90,6 @@ fn save_files(textures: &mut Vec<Texture>) -> bool {
 	    file.write_all(remote_file.into_inner().as_slice());
 
 	    downloads = true;
-
-	    //Add the new file to the texture list
-	    textures.push(Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + &file_name)).unwrap());
     }
 
     // Disconnect from the server
@@ -104,18 +101,6 @@ fn save_files(textures: &mut Vec<Texture>) -> bool {
 fn correct_code_filter(name: &String) -> bool {
     name.contains("IDR043") && !name.contains(".gif")
 }
-/*
-fn main2() {
-
-   loop {
-	while !save_files(){
-	    println!("No new files");
-	    wait_mins(1, true);
-	}
-        wait_mins(3, true);
-    }
-}
-*/
 
 fn wait_mins(mut mins: u8, verbose: bool){
     let ten_sec = Duration::new(10, 0);
@@ -142,93 +127,61 @@ fn wait_mins(mut mins: u8, verbose: bool){
 
 fn main() {
 
-    let mut textures: Vec<Texture> =  vec!();
+    save_files();
 
-    let mut window = RenderWindow::new(VideoMode::new_init(800, 600, 32),
-                                       "Image Viewer",
-                                       window_style::CLOSE,
-                                       &Default::default())
-        .unwrap();
+    open_window();
+}
+
+// Opens a new window, displaying only the files that currently exist in img
+fn open_window(){
+    let textures = create_textures_from_files();
+    let mut current_index = 0;
+
+    let mut last_frame = SystemTime::now();
+    let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
+    let bg_texture = Texture::new_from_file("Test_Image.png").unwrap();
+    let background = Sprite::new_with_texture(&bg_texture).unwrap();
+
+    let mut window = RenderWindow::new(VideoMode::new_init(512, 512, 32),
+                                        "Image Viewer",
+					window_style::CLOSE,
+					&Default::default())
+	.unwrap();
     window.set_vertical_sync_enabled(true);
 
-    // Create a tuple representing the currently displayed image. Represents (name, texture)
-    // where texture is the actual texture object which needs to be kept alive
-    let mut current_data = (String::new(), Sprite::new().unwrap(), Box::new(Texture::new(100, 100).unwrap()));
-
-    //let mut sprite = Sprite::new().unwrap();
-
-    save_files(&mut textures);
-    let mut last_check = SystemTime::now();
-    
     loop {
         for event in window.events() {
-            match event {
-                event::Closed => return,
-                event::KeyPressed { code: Key::Escape, .. } => return,
-                event::KeyPressed { code: Key::Right, .. } => move_sprite(&mut current_data.1, 5.0, 0.0),
-                event::KeyPressed { code: Key::Left, .. } => move_sprite(&mut current_data.1,-5.0, 0.0),
-                event::KeyPressed { code: Key::Up, .. } => move_sprite(&mut current_data.1, 0.0, -5.0),
-                event::KeyPressed { code: Key::Down, .. } => move_sprite(&mut current_data.1, 0.0, 5.0),
-                //event::KeyPressed { code: Key::Return, .. } => next_index = next_image(&mut sprite, &textures, next_index),
-                event::KeyPressed { code: Key::Return, .. } => current_data = next_image(&mut current_data.1, current_data.0),
+	    match event {
+	        event::Closed => return,
                 _ => {}
             }
         }
 
-        window.clear(&Color::black());
-        window.draw(&current_data.1);
-        window.display();
+	window.clear(&Color::black());
+	window.draw(&background);
+	window.draw(&sprite);
+	window.display();
 
-	if last_check.elapsed().unwrap().as_secs() > 3600 {
-	    //save_files(&mut textures);
-	    last_check = SystemTime::now();
+	if last_frame.elapsed().unwrap().as_secs() >= 1{
+	    current_index = next_image(&mut sprite, &textures, current_index);
+	    last_frame = SystemTime::now();
 	}
     }
 }
 
-
-fn move_sprite(sprite: &mut Sprite, x: f32, y: f32){
-    sprite.move2f(x, y);
-}
-
-/*
-fn next_image<'a>(sprite: &mut Sprite<'a>, images: &'a Vec<Texture>, next_texture: usize) -> usize{
-    sprite.set_texture(&images[next_texture], true);
-    
-    println!("next_texture: {} | len(): {}", next_texture, images.len());
-    if next_texture +1 < images.len() {return next_texture + 1;} else {return 0;}
-}
-*/
-
-fn next_image<'a>(sprite: &mut Sprite, current_img: String) -> (String, Sprite<'a>, Box<Texture>) {
-    //First pull in a list of all the images in the directory and order it
+fn create_textures_from_files() -> Vec<Texture> {
+    // Get a list of filenames in the folder
     let files = fs::read_dir("./img/").unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
     file_names.sort();
 
-    //Iterate through the list until we find the filename we are currently displaying, and show the next
-    let mut found = false;
-    let mut looped = true;
-    let mut target = String::new();
+    let textures: Vec<Texture> = file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect();
+    textures
+}
 
-    for file_name in file_names.iter() {
-        if found {
-	    target = file_name.clone();
-	    looped = false;
-	    break;
-	} else if file_name.eq(&current_img) {
-	    found = true;
-	}
-    }
-
-    if looped {
-        target = file_names.first().unwrap().to_string();
-    }
-
-    //Set the texture
-    let texture = Box::new(Texture::new_from_file(&target).unwrap());
-    //sprite.set_texture(&texture, true);
-    let sprite = Sprite::new_with_texture(&texture).unwrap();
-    (target, sprite, texture)
+fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_index: usize) -> usize{
+    let index = if current_index + 1 < textures.len() { current_index + 1 } else { 0 };
+    sprite.set_texture(&textures[index], true);
+    index
 }
 
