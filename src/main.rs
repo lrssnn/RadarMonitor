@@ -3,7 +3,10 @@ extern crate sfml;
 extern crate time;
 
 use std::str;
-use ftp::FtpStream;
+use std::fs;
+use std::thread;
+
+use std::iter::Iterator;
 
 use std::io::prelude::*;
 use std::fs::File;
@@ -11,25 +14,18 @@ use std::fs::File;
 use std::string::String;
 
 use std::thread::sleep;
+
 use std::time::Duration;
-use std::time::SystemTime;
+
+use std::sync::{Arc, Mutex};
+
+use ftp::FtpStream;
 
 use sfml::graphics::{Color, RenderTarget, RenderWindow};
 use sfml::window::{VideoMode, event, window_style, Key};
 
 use sfml::graphics::Texture;
 use sfml::graphics::Sprite;
-
-use std::iter::Iterator;
-
-use std::fs;
-
-use std::thread;
-
-use std::sync::Arc;
-use std::sync::Mutex;
-
-use time::Tm;
 
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
