@@ -10,6 +10,11 @@ use sfml::window::{VideoMode, event, window_style, Key};
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
 const LOCATION_CODE: &'static str = "IDR043";
+
+const SPEED_SLOW: usize = 300;
+const SPEED_MID: usize  = 200;
+const SPEED_FAST: usize = 100;
+
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
     let mut current_index = 0;
@@ -17,7 +22,8 @@ pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
     let mut last_frame = time::now();
     let mut this_frame;
 
-    let time_per_frame = 200;
+
+    let mut time_per_frame: usize = SPEED_MID;
 
 
     let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
@@ -42,8 +48,8 @@ pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
 	        match event {
 	            event::Closed => {exit(&finish); return},
 		    event::KeyPressed { code: Key::Escape, .. } => {exit(&finish); return},
-		    //event::KeyPressed { code: Key::PageUp, .. } => time_per_frame -= 100,
-		    //event::KeyPressed { code: Key::PageDown, .. } => time_per_frame += 100,
+		    event::KeyPressed { code: Key::PageUp, .. } => time_per_frame = change_speed(time_per_frame, true),
+		    event::KeyPressed { code: Key::PageDown, .. } => time_per_frame = change_speed(time_per_frame, false),
                     _ => {}
                 }
             }
@@ -56,7 +62,7 @@ pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
 	    window.display();
 
 	    this_frame = time::now();
-	    if (this_frame - last_frame).num_milliseconds() >= time_per_frame {
+	    if (this_frame - last_frame).num_milliseconds() >= time_per_frame as i64 {
 	        current_index = next_image(&mut sprite, &textures, current_index);
 	        last_frame = time::now();
 	    
@@ -93,3 +99,18 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_i
     index
 }
 
+fn change_speed(current: usize, increase: bool) -> usize {
+    if increase {
+        if current == SPEED_FAST {
+           return SPEED_MID;
+        } else {
+	    return SPEED_SLOW;
+	}
+    } else {
+        if current == SPEED_SLOW {
+	    return SPEED_MID;
+	} else {
+	    return SPEED_FAST;
+	}
+    } return SPEED_MID;
+}
