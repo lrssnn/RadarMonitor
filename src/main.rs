@@ -27,6 +27,7 @@ use sfml::window::{VideoMode, event, window_style, Key};
 use sfml::graphics::Texture;
 use sfml::graphics::Sprite;
 
+const VERBOSE: bool = true;
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
 const LOCATION_CODE: &'static str = "IDR043";
@@ -61,9 +62,13 @@ fn main() {
 	
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least 1 new file
-	wait_mins(5, true);
+	if wait_mins(5, &finish) {
+	    return;
+	}
 	while !save_files() {
-	    wait_mins(1, true);
+	    if wait_mins(1, &finish) {
+	        return;
+	    }
 	}
 
         // Lock the mutex, then tell the other thread to update the list
@@ -140,27 +145,29 @@ fn correct_code_filter(name: &String) -> bool {
     name.contains(LOCATION_CODE) && !name.contains(".gif")
 }
 
-fn wait_mins(mut mins: u8, verbose: bool){
-    let ten_sec = Duration::new(10, 0);
-    loop {
-        if verbose {
-            print!("{}", mins);
+fn wait_mins(mut mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
+    let mut secs = mins * 60;
+    
+    let one_sec = Duration::new(1, 0);
+
+    while secs > 0 {
+        if VERBOSE {
+	    print!("\rWaiting {} seconds...", secs);
 	    std::io::stdout().flush();
 	}
-	for _ in 0..6 {
-	    sleep(ten_sec);
-	    if verbose {
-	        print!(".");
-	        std::io::stdout().flush();
-	    }
-	}
-	mins -= 1;
-	if mins == 0 {
-            if verbose {println!("0")};
-	    return;
+        
+        sleep(one_sec);
+
+	let terminate = terminate.lock().unwrap();
+	if *terminate {
+	    if VERBOSE { println!("")};
+	    return true;
 	}
 
-    }	
+	secs -= 1;
+    }
+    if VERBOSE { println!("")};
+    false
 }
 
 // Opens a new window, displaying only the files that currently exist in img
@@ -193,8 +200,8 @@ fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
         while !reload {
             for event in window.events() {
 	        match event {
-	            event::Closed => return,
-		    event::KeyPressed { code: Key::Escape, .. } => return,
+	            event::Closed => {exit(&finish); return},
+		    event::KeyPressed { code: Key::Escape, .. } => {exit(&finish); return},
 		    //event::KeyPressed { code: Key::PageUp, .. } => time_per_frame -= 100,
 		    //event::KeyPressed { code: Key::PageDown, .. } => time_per_frame += 100,
                     _ => {}
@@ -223,6 +230,11 @@ fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
 	    }
         }
     }
+}
+
+fn exit(terminate: &Arc<Mutex<bool>>) {
+    let mut terminate = terminate.lock().unwrap();  
+    *terminate = true;
 }
 
 fn create_textures_from_files() -> Vec<Texture> {
