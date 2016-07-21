@@ -43,26 +43,33 @@ fn main() {
 
     save_files();
 
-    loop {
 
-	// Create a boolean variable which we will send to the child thread when it is time to terminate
-        let finish = Arc::new(Mutex::new(false));
-        // Cloning an Arc actually just gives us a new reference. We move this reference into the other thread
-	// but it points to the same boolean we have here.
-	let clone = finish.clone();
-	// Start the thread which displays the window
-        thread::spawn(move || {
-	    open_window(&clone);
-	});
+    // Create a boolean variable which we will send to the child thread when it is time to regenerate the texture list
+    // and one which tells the main thread when the child thread has been closed
+    let finish = Arc::new(Mutex::new(false));
+    let update = Arc::new(Mutex::new(false));
+
+    // Cloning an Arc actually just gives us a new reference. We move this reference into the other thread
+    // but it points to the same boolean we have here.
+    let finish_clone = finish.clone();
+    let update_clone = update.clone();
+
+    // Start the thread which displays the window
+    thread::spawn(move || {
+        open_window(&finish_clone, &update_clone);
+    });
+	
+    loop {
         // Wait for 5 minutes, then check the server every minute until we get at least 1 new file
 	wait_mins(5, true);
 	while !save_files() {
 	    wait_mins(1, true);
 	}
-        // Lock the mutex, then tell the other thread to finish, we will replace the window with a new one next iteration.
+
+        // Lock the mutex, then tell the other thread to update the list
 	// Mutex is released implicitly when this loop scope ends.
-        let mut finish = finish.lock().unwrap();
-	*finish = true;
+        let mut update = update.lock().unwrap();
+	*update = true;
     }
 }
 
@@ -157,8 +164,7 @@ fn wait_mins(mut mins: u8, verbose: bool){
 }
 
 // Opens a new window, displaying only the files that currently exist in img
-fn open_window(finish: &Arc<Mutex<bool>>){
-    let textures = create_textures_from_files();
+fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
     let mut current_index = 0;
 
     let mut last_frame = time::now();
@@ -166,7 +172,6 @@ fn open_window(finish: &Arc<Mutex<bool>>){
 
     let mut time_per_frame = 200;
 
-    let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
 
     let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
     let lc_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".locations.png")).unwrap();
@@ -182,32 +187,41 @@ fn open_window(finish: &Arc<Mutex<bool>>){
     window.set_vertical_sync_enabled(true);
 
     loop {
-        for event in window.events() {
-	    match event {
-	        event::Closed => return,
-		event::KeyPressed { code: Key::Escape, .. } => return,
-		//event::KeyPressed { code: Key::PageUp, .. } => time_per_frame -= 100,
-		//event::KeyPressed { code: Key::PageDown, .. } => time_per_frame += 100,
-                _ => {}
+        let textures = create_textures_from_files();
+        let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
+	let mut reload = false;
+        while !reload {
+            for event in window.events() {
+	        match event {
+	            event::Closed => return,
+		    event::KeyPressed { code: Key::Escape, .. } => return,
+		    //event::KeyPressed { code: Key::PageUp, .. } => time_per_frame -= 100,
+		    //event::KeyPressed { code: Key::PageDown, .. } => time_per_frame += 100,
+                    _ => {}
+                }
             }
+	
+
+	    window.clear(&Color::black());
+	    window.draw(&bg);
+	    window.draw(&lc);
+	    window.draw(&sprite);
+	    window.display();
+
+	    this_frame = time::now();
+	    if (this_frame - last_frame).num_milliseconds() >= time_per_frame {
+	        current_index = next_image(&mut sprite, &textures, current_index);
+	        last_frame = time::now();
+	    
+	        //Check if we should update if we are looping over to the start again
+	        if current_index == 0 {
+	            let update = update.lock().unwrap();
+		    if *update {
+		        reload = true;
+		    }
+	        }
+	    }
         }
-
-	window.clear(&Color::black());
-	window.draw(&bg);
-	window.draw(&lc);
-	window.draw(&sprite);
-	window.display();
-
-	this_frame = time::now();
-	if (this_frame - last_frame).num_milliseconds() >= time_per_frame {
-	    current_index = next_image(&mut sprite, &textures, current_index);
-	    last_frame = time::now();
-	}
-
-        let finish = finish.lock().unwrap();
-	if *finish {
-	    return;
-	}
     }
 }
 
