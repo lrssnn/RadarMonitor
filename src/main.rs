@@ -1,5 +1,6 @@
 extern crate ftp;
 extern crate sfml;
+extern crate time;
 
 use std::str;
 use ftp::FtpStream;
@@ -14,7 +15,7 @@ use std::time::Duration;
 use std::time::SystemTime;
 
 use sfml::graphics::{Color, RenderTarget, RenderWindow};
-use sfml::window::{VideoMode, event, window_style};
+use sfml::window::{VideoMode, event, window_style, Key};
 
 use sfml::graphics::Texture;
 use sfml::graphics::Sprite;
@@ -27,6 +28,8 @@ use std::thread;
 
 use std::sync::Arc;
 use std::sync::Mutex;
+
+use time::Tm;
 
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
@@ -162,7 +165,11 @@ fn open_window(finish: &Arc<Mutex<bool>>){
     let textures = create_textures_from_files();
     let mut current_index = 0;
 
-    let mut last_frame = SystemTime::now();
+    let mut last_frame = time::now();
+    let mut this_frame = time::now();
+
+    let mut time_per_frame = 200;
+
     let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
 
     let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
@@ -182,6 +189,9 @@ fn open_window(finish: &Arc<Mutex<bool>>){
         for event in window.events() {
 	    match event {
 	        event::Closed => return,
+		event::KeyPressed { code: Key::Escape, .. } => return,
+		//event::KeyPressed { code: Key::PageUp, .. } => time_per_frame -= 100,
+		//event::KeyPressed { code: Key::PageDown, .. } => time_per_frame += 100,
                 _ => {}
             }
         }
@@ -192,9 +202,10 @@ fn open_window(finish: &Arc<Mutex<bool>>){
 	window.draw(&sprite);
 	window.display();
 
-	if last_frame.elapsed().unwrap().as_secs() >= 1{
+	this_frame = time::now();
+	if (this_frame - last_frame).num_milliseconds() >= time_per_frame {
 	    current_index = next_image(&mut sprite, &textures, current_index);
-	    last_frame = SystemTime::now();
+	    last_frame = time::now();
 	}
 
         let finish = finish.lock().unwrap();
