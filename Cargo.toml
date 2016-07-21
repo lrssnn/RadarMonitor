@@ -1,6 +1,6 @@
 [package]
-name = "RadarMonitor"
-version = "0.1.0"
+name = "radar_monitor"
+version = "1.0.0"
 authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 
 [dependencies]

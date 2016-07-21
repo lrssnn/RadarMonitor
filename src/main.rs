@@ -21,11 +21,8 @@ use std::sync::{Arc, Mutex};
 
 use ftp::FtpStream;
 
-use sfml::graphics::{Color, RenderTarget, RenderWindow};
+use sfml::graphics::{Color, RenderTarget, RenderWindow, Texture, Sprite};
 use sfml::window::{VideoMode, event, window_style, Key};
-
-use sfml::graphics::Texture;
-use sfml::graphics::Sprite;
 
 const VERBOSE: bool = true;
 
@@ -35,15 +32,13 @@ const LOCATION_CODE: &'static str = "IDR043";
 // Need to use this in order to delete older files.
 // To do this, will need to figure out a way to list the directory again.
 // Should be easier because we aren't doing comparisons
-const IMAGES_KEPT: usize = 10;
+// const IMAGES_KEPT: usize = 10;
 
 // Main function.
 fn main() {
 
     init();
-
     save_files();
-
 
     // Create a boolean variable which we will send to the child thread when it is time to regenerate the texture list
     // and one which tells the main thread when the child thread has been closed
@@ -130,7 +125,7 @@ fn save_files() -> bool {
 	    let mut file = File::create(DOWNLOAD_FOLDER.to_string() + &file_name).ok().unwrap();
 
 	    // Write the file
-	    file.write_all(remote_file.into_inner().as_slice());
+	    file.write_all(remote_file.into_inner().as_slice()).unwrap();
 
 	    downloads = true;
     }
@@ -145,7 +140,7 @@ fn correct_code_filter(name: &String) -> bool {
     name.contains(LOCATION_CODE) && !name.contains(".gif")
 }
 
-fn wait_mins(mut mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
+fn wait_mins(mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
     let mut secs = mins * 60;
     
     let one_sec = Duration::new(1, 0);
@@ -153,7 +148,7 @@ fn wait_mins(mut mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
     while secs > 0 {
         if VERBOSE {
 	    print!("\rWaiting {} seconds...", secs);
-	    std::io::stdout().flush();
+	    std::io::stdout().flush().unwrap();
 	}
         
         sleep(one_sec);
@@ -175,9 +170,9 @@ fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
     let mut current_index = 0;
 
     let mut last_frame = time::now();
-    let mut this_frame = time::now();
+    let mut this_frame;
 
-    let mut time_per_frame = 200;
+    let time_per_frame = 200;
 
 
     let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
@@ -307,8 +302,8 @@ fn init() {
 	let mut lc_file = File::create(location_file_name).ok().unwrap();
 	
 	// Write the files
-	bg_file.write_all(background_file.into_inner().as_slice());
-	lc_file.write_all(location_file.into_inner().as_slice());
+	bg_file.write_all(background_file.into_inner().as_slice()).unwrap();
+	lc_file.write_all(location_file.into_inner().as_slice()).unwrap();
 
         // Disconnect from the server
         let _ = ftp_stream.quit();

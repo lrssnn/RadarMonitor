@@ -1,6 +1,6 @@
 [root]
-name = "RadarMonitor"
-version = "0.1.0"
+name = "radar_monitor"
+version = "1.0.0"
 dependencies = [
  "ftp 0.0.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "sfml 0.11.2 (registry+https://github.com/rust-lang/crates.io-index)",
