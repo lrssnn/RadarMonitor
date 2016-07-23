@@ -10,6 +10,7 @@ use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use ftp::FtpStream;
 
+
 const VERBOSE: bool = true;
 
 const DOWNLOAD_FOLDER: &'static str = "img/";
@@ -115,6 +116,12 @@ pub fn wait_mins(mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
 
 // Save the radar background if it is not already present
 pub fn init() {
+    // Attempt to create the img/ directory
+    // We don't care whether it works or not, if it fails the directory already exists: good
+    match std::fs::create_dir("img") {
+        Ok(_) => ..,
+	Err(_) => ..
+    };
 
     let background_file_name = &(LOCATION_CODE.to_string() + ".background.png");
     let location_file_name = &(LOCATION_CODE.to_string() + ".locations.png");
