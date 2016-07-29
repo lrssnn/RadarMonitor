@@ -3,6 +3,7 @@ extern crate ftp;
 use std;
 use std::str;
 use std::io::prelude::*;
+use std::fs;
 use std::fs::File;
 use std::string::String;
 use std::thread::sleep;
@@ -20,7 +21,7 @@ const LOCATION_CODE: &'static str = "IDR043";
 // Need to use this in order to delete older files.
 // To do this, will need to figure out a way to list the directory again.
 // Should be easier because we aren't doing comparisons
-// const IMAGES_KEPT: usize = 10;
+const IMAGES_KEPT: usize = 10;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
@@ -82,6 +83,8 @@ pub fn save_files() -> bool {
     // Disconnect from the server
     let _ = ftp_stream.quit();
 
+    if downloads {remove_old_files();}
+
     downloads
 }
 
@@ -118,7 +121,7 @@ pub fn wait_mins(mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
 pub fn init() {
     // Attempt to create the img/ directory
     // We don't care whether it works or not, if it fails the directory already exists: good
-    match std::fs::create_dir("img") {
+    match std::fs::create_dir(DOWNLOAD_FOLDER) {
         Ok(_) => ..,
 	Err(_) => ..
     };
@@ -181,4 +184,26 @@ pub fn init() {
         let _ = ftp_stream.quit();
     }
         
+}
+
+fn remove_old_files() {
+    // If the number to keep is 0, means keep everything
+    if IMAGES_KEPT == 0 {return;}
+
+    // Get a list of every file in the image folder
+    let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
+
+    let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    file_names.sort();
+
+    println!("Images in img/: {}", file_names.len());
+
+    let mut file_names = file_names.iter();
+
+    while file_names.len() > IMAGES_KEPT {
+        //Delete a file
+	let name = file_names.next().unwrap();
+	println!("List length: {}, target: {} Removing: {}", file_names.len(), IMAGES_KEPT, name);
+        fs::remove_file(name);
+    }
 }

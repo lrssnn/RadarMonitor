@@ -85,7 +85,7 @@ fn exit(terminate: &Arc<Mutex<bool>>) {
 
 fn create_textures_from_files() -> Vec<Texture> {
     // Get a list of filenames in the folder
-    let files = fs::read_dir("./img/").unwrap();
+    let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
     file_names.sort();
 
