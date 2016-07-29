@@ -9,7 +9,18 @@ mod image_viewer;
 use image_viewer::open_window;
 
 mod downloader;
-use downloader::{save_files, init, wait_mins};
+use downloader::{save_files, init, wait_mins, remove_old_files};
+
+// Configuration constants
+const VERBOSE: bool = true;    // If false, program will not print to standard out
+const IMAGES_KEPT: usize = 10; // Number of images to keep in the rotating set
+
+const DOWNLOAD_FOLDER: &'static str = "img/"; // Folder to keep images in. Relative to start dir or absolute
+const LOCATION_CODE: &'static str = "IDR043"; // BOM product code for the desired radar image set
+// Milliseconds per frame
+const SPEED_SLOW: usize = 300;
+const SPEED_MID: usize  = 200;
+const SPEED_FAST: usize = 100;
 
 // Main function.
 fn main() {
@@ -47,5 +58,7 @@ fn main() {
 	// Mutex is released implicitly when this loop scope ends.
         let mut update = update.lock().unwrap();
 	*update = true;
+
+	remove_old_files();
     }
 }

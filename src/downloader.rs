@@ -12,16 +12,10 @@ use std::sync::{Arc, Mutex};
 use ftp::FtpStream;
 
 
-const VERBOSE: bool = true;
-
-const DOWNLOAD_FOLDER: &'static str = "img/";
-const LOCATION_CODE: &'static str = "IDR043";
-
-// TODO:
-// Need to use this in order to delete older files.
-// To do this, will need to figure out a way to list the directory again.
-// Should be easier because we aren't doing comparisons
-const IMAGES_KEPT: usize = 10;
+use super::VERBOSE;
+use super::DOWNLOAD_FOLDER;
+use super::LOCATION_CODE;
+use super::IMAGES_KEPT;
 
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
@@ -83,7 +77,6 @@ pub fn save_files() -> bool {
     // Disconnect from the server
     let _ = ftp_stream.quit();
 
-    if downloads {remove_old_files();}
 
     downloads
 }
@@ -186,7 +179,7 @@ pub fn init() {
         
 }
 
-fn remove_old_files() {
+pub fn remove_old_files() {
     // If the number to keep is 0, means keep everything
     if IMAGES_KEPT == 0 {return;}
 

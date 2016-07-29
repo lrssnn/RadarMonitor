@@ -8,12 +8,13 @@ use std::sync::{Arc, Mutex};
 use sfml::graphics::{Color, RenderTarget, RenderWindow, Texture, Sprite};
 use sfml::window::{VideoMode, event, window_style, Key};
 
-const DOWNLOAD_FOLDER: &'static str = "img/";
-const LOCATION_CODE: &'static str = "IDR043";
 
-const SPEED_SLOW: usize = 300;
-const SPEED_MID: usize  = 200;
-const SPEED_FAST: usize = 100;
+use super::SPEED_SLOW;
+use super::SPEED_MID;
+use super::SPEED_FAST;
+use super::LOCATION_CODE;
+use super::DOWNLOAD_FOLDER;
+use super::IMAGES_KEPT;
 
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
@@ -88,6 +89,9 @@ fn create_textures_from_files() -> Vec<Texture> {
     let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
     file_names.sort();
+
+    let len = file_names.len();
+    let mut file_names = file_names.split_off(len - IMAGES_KEPT);
 
     let textures: Vec<Texture> = file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect();
     textures
