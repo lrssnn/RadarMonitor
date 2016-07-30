@@ -13,7 +13,7 @@ use downloader::{save_files, init, wait_mins, remove_old_files};
 
 // Configuration constants
 const VERBOSE: bool = true;    // If false, program will not print to standard out
-const IMAGES_KEPT: usize = 10; // Number of images to keep in the rotating set
+const IMAGES_KEPT: usize = 0; // Number of images to keep in the rotating set
 
 const DOWNLOAD_FOLDER: &'static str = "img/"; // Folder to keep images in. Relative to start dir or absolute
 const LOCATION_CODE: &'static str = "IDR043"; // BOM product code for the desired radar image set

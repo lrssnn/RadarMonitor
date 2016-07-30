@@ -90,8 +90,10 @@ fn create_textures_from_files() -> Vec<Texture> {
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
     file_names.sort();
 
-    let len = file_names.len();
-    let mut file_names = file_names.split_off(len - IMAGES_KEPT);
+    if IMAGES_KEPT > 0 {
+        let len = file_names.len();
+        let mut file_names = file_names.split_off(len - IMAGES_KEPT);
+    }
 
     let textures: Vec<Texture> = file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect();
     textures
