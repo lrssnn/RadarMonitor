@@ -5,5 +5,5 @@ authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 
 [dependencies]
 ftp = "*"
-sfml = "0.11.1"
+sfml = "0.11.2"
 time = "0.1"
