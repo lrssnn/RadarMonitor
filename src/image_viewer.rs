@@ -1,3 +1,10 @@
+use super::glium;
+use glium::DisplayBuild;
+use glium::{Surface, VertexBuffer, IndexBuffer};
+use glium::index::PrimitiveType;
+use glium::texture::{Texture2d, RawImage2d};
+
+use glium::draw_parameters::{DrawParameters, Blend};
 use time;
 
 use std::str;
@@ -6,10 +13,6 @@ use std::iter::Iterator;
 use std::sync::{Arc};
 use std::sync::atomic::{Ordering, AtomicBool};
 
-use sfml::graphics::{Color, RenderTarget, RenderWindow, Texture, Sprite};
-use sfml::window::{VideoMode, event, window_style, Key};
-
-
 use super::SPEED_SLOW;
 use super::SPEED_MID;
 use super::SPEED_FAST;
@@ -17,31 +20,113 @@ use super::LOCATION_CODE;
 use super::DOWNLOAD_FOLDER;
 use super::IMAGES_KEPT;
 
+extern crate image;
+
+#[derive(Copy, Clone)]
+struct Vertex {
+    pub position: [f32; 2],
+    pub colour: [f32; 3],
+    pub texture_pos: [f32; 2],
+}
+
+implement_vertex!(Vertex, position, colour, texture_pos);
+
+fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
+    let image = image::open(img).unwrap().to_rgba();
+
+    let image_dim = image.dimensions();
+
+    let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dim);
+
+    Texture2d::new(display, image).unwrap()
+    
+}
+
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
     let mut current_index = 0;
 
     let mut last_frame = time::now();
-    let mut this_frame;
+    //let mut this_frame;
 
 
     let mut time_per_frame: usize = SPEED_MID;
 
+    // Open the window
+    let display = glium::glutin::WindowBuilder::new()
+        .with_dimensions(512, 512)
+        .with_title("Radar Monitor")
+        .build_glium()
+        .expect("Unable to create a window");
 
-    let bg_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".background.png")).unwrap();
-    let lc_texture = Texture::new_from_file(&(LOCATION_CODE.to_string() + ".locations.png")).unwrap();
+    let bg_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + 
+                                                    ".background.png"));
+    let lc_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + 
+                                                    ".locations.png"));
 
-    let bg = Sprite::new_with_texture(&bg_texture).unwrap();
-    let lc = Sprite::new_with_texture(&lc_texture).unwrap();
+    let program = {
+        const VERT_SHADER: &'static str = include_str!("res/shader.vert");
+        const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
 
-    let mut window = RenderWindow::new(VideoMode::new_init(512, 512, 32),
-                                        "Image Viewer",
-					window_style::CLOSE,
-					&Default::default())
-	.unwrap();
-    window.set_vertical_sync_enabled(true);
+        glium::Program::from_source(&display, VERT_SHADER, FRAG_SHADER, None).unwrap()
+    };
+
+    let vertices = vec![
+        Vertex { position: [-1.0,  1.0], colour: [0.0; 3], texture_pos: [0.0, 1.0]},
+        Vertex { position: [-1.0, -1.0], colour: [0.0; 3], texture_pos: [0.0, 0.0]},
+        Vertex { position: [ 1.0,  1.0], colour: [0.0; 3], texture_pos: [1.0, 1.0]},
+        Vertex { position: [ 1.0, -1.0], colour: [0.0; 3], texture_pos: [1.0, 0.0]},
+    ];
+
+    let vertices = VertexBuffer::new(&display, &vertices).unwrap();
+
+    let indices: Vec<u16> = vec![
+        0, 2, 1,
+        1, 3, 2,
+    ];
+
+    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &indices).unwrap();
+
+    let params = DrawParameters {
+        blend: Blend::alpha_blending(),
+        ..Default::default()
+    };
+
 
     loop {
+
+        let mut target = display.draw();
+
+        target.clear_color(0.0, 0.0, 0.0, 0.0);
+
+        target.draw(&vertices,
+                    &indices,
+                    &program,
+                    &uniform! {
+                        tex: &bg_texture,
+                    },
+                    &Default::default())
+            .unwrap();
+
+        
+        target.draw(&vertices,
+                    &indices,
+                    &program,
+                    &uniform! {
+                        tex: &lc_texture,
+                    },
+                    &params)
+            .unwrap();
+
+        target.finish().unwrap();
+
+        for ev in display.poll_events() {
+            match ev {
+                glium::glutin::Event::Closed => {exit(finish); return},
+                _ => (),
+            }
+        }
+        /*
         let textures = create_textures_from_files();
         let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
 	let mut reload = false;
@@ -77,13 +162,16 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
 	        }
 	    }
         }
+        */
     }
 }
+
 
 fn exit(terminate: &Arc<AtomicBool>) {
     terminate.store(true, Ordering::Relaxed);
 }
 
+/*
 fn create_textures_from_files() -> Vec<Texture> {
     // Get a list of filenames in the folder
     let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
@@ -103,6 +191,7 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_i
     sprite.set_texture(&textures[index], true);
     index
 }
+*/
 
 fn change_speed(current: usize, increase: bool) -> usize {
     if increase {
