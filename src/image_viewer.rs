@@ -5,6 +5,10 @@ use glium::index::PrimitiveType;
 use glium::texture::{Texture2d, RawImage2d};
 
 use glium::draw_parameters::{DrawParameters, Blend};
+
+use glium::glutin::Event::KeyboardInput;
+use glium::glutin::VirtualKeyCode as Key;
+
 use time;
 
 use std::str;
@@ -47,7 +51,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
     let mut current_index = 0;
 
     let mut last_frame = time::now();
-    //let mut this_frame;
+    let mut this_frame;
 
 
     let mut time_per_frame: usize = SPEED_MID;
@@ -95,74 +99,80 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
 
     loop {
 
-        let mut target = display.draw();
-
-        target.clear_color(0.0, 0.0, 0.0, 0.0);
-
-        target.draw(&vertices,
-                    &indices,
-                    &program,
-                    &uniform! {
-                        tex: &bg_texture,
-                    },
-                    &Default::default())
-            .unwrap();
-
+        let mut textures = create_textures_from_files(&display);
         
-        target.draw(&vertices,
-                    &indices,
-                    &program,
-                    &uniform! {
-                        tex: &lc_texture,
-                    },
-                    &params)
-            .unwrap();
+        println!("Received a list of {} textures", textures.len());
 
-        target.finish().unwrap();
+	    let mut reload = false;
 
-        for ev in display.poll_events() {
-            match ev {
-                glium::glutin::Event::Closed => {exit(finish); return},
-                _ => (),
-            }
-        }
-        /*
-        let textures = create_textures_from_files();
-        let mut sprite = Sprite::new_with_texture(&textures[0]).unwrap();
-	let mut reload = false;
         while !reload {
-            for event in window.events() {
-	        match event {
-	            event::Closed => {exit(&finish); return},
-		    event::KeyPressed { code: Key::Escape, .. } => {exit(&finish); return},
-		    event::KeyPressed { code: Key::PageUp, .. } => time_per_frame = change_speed(time_per_frame, true),
-		    event::KeyPressed { code: Key::PageDown, .. } => time_per_frame = change_speed(time_per_frame, false),
-                    _ => {}
+            let mut target = display.draw();
+
+            target.clear_color(0.0, 0.0, 0.0, 0.0);
+
+            target.draw(&vertices,
+                        &indices,
+                        &program,
+                        &uniform! {
+                            tex: &bg_texture,
+                        },
+                        &Default::default())
+                .unwrap();
+
+            
+            target.draw(&vertices,
+                        &indices,
+                        &program,
+                        &uniform! {
+                            tex: &lc_texture,
+                        },
+                        &params)
+                .unwrap();
+
+            target.draw(&vertices,
+                        &indices,
+                        &program,
+                        &uniform! {
+                            tex: &textures[current_index],
+                        },
+                        &params)
+                .unwrap();
+
+            target.finish().unwrap();
+
+            for ev in display.poll_events() {
+                match ev {
+                    glium::glutin::Event::Closed => {exit(finish); return},
+                    
+                    KeyboardInput(state, _, Some(key)) => {
+
+                        match key {
+                            Key::Escape => {exit(finish); return},
+                            Key::PageUp => time_per_frame = change_speed(time_per_frame, true),
+                            Key::PageDown => time_per_frame = change_speed(time_per_frame, false),
+                            _ => (),
+                        }
+                    },
+                    _ => (),
                 }
             }
-	
 
-	    window.clear(&Color::black());
-	    window.draw(&bg);
-	    window.draw(&lc);
-	    window.draw(&sprite);
-	    window.display();
+            this_frame = time::now();
 
-	    this_frame = time::now();
-	    if (this_frame - last_frame).num_milliseconds() >= time_per_frame as i64 {
-	        current_index = next_image(&mut sprite, &textures, current_index);
-	        last_frame = time::now();
-	    
-	        //Check if we should update if we are looping over to the start again
-	        if current_index == 0 {
-	            let update = update.load(Ordering::Relaxed);
-		    if update {
-		        reload = true;
-		    }
-	        }
-	    }
+            if (this_frame - last_frame).num_milliseconds() >= time_per_frame as i64 {
+                current_index = if current_index + 1 < textures.len() { current_index + 1 } else { 0 };
+                last_frame = time::now();
+            
+                //Check if we should update if we are looping over to the start again
+                if current_index == 0 {
+                    let update = update.swap(false, Ordering::Relaxed);
+                    
+                    if update {
+                        reload = true;
+                    }
+                }
+            }
         }
-        */
     }
 }
 
@@ -171,11 +181,13 @@ fn exit(terminate: &Arc<AtomicBool>) {
     terminate.store(true, Ordering::Relaxed);
 }
 
-/*
-fn create_textures_from_files() -> Vec<Texture> {
+fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
     // Get a list of filenames in the folder
+    println!("Reading file system");
     let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
+    println!("Extracting Filenames");
     let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
+    println!("Sorting names");
     file_names.sort();
 
     if IMAGES_KEPT > 0 {
@@ -183,9 +195,11 @@ fn create_textures_from_files() -> Vec<Texture> {
         let file_names = file_names.split_off(len - IMAGES_KEPT);
     }
 
-    file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect()
+    println!("Creating textures...");
+    file_names.iter().map(|e| texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e))).collect()
 }
 
+/*
 fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_index: usize) -> usize{
     let index = if current_index + 1 < textures.len() { current_index + 1 } else { 0 };
     sprite.set_texture(&textures[index], true);
