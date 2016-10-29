@@ -1,4 +1,4 @@
-#![allow(missing_docs_in_private_items)]
+#![allow(unknown_lints, missing_docs_in_private_items, unseparated_literal_suffix, print_stdout)]
 
 extern crate ftp;
 extern crate time;
@@ -6,7 +6,7 @@ extern crate time;
 extern crate glium;
 
 use std::thread;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool};
 
 mod image_viewer;
@@ -23,7 +23,7 @@ const DOWNLOAD_FOLDER: &'static str = "img/"; // Folder to keep images in. Relat
 const LOCATION_CODE: &'static str = "IDR043"; // BOM product code for the desired radar image set
 // Milliseconds per frame
 const SPEED_SLOW: usize = 300;
-const SPEED_MID: usize  = 200;
+const SPEED_MID: usize = 200;
 const SPEED_FAST: usize = 100;
 
 // Main function.
@@ -46,22 +46,22 @@ fn main() {
     thread::spawn(move || {
         open_window(&finish_clone, &update_clone);
     });
-	
+
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least 1 new file
-	if wait_mins(5, &finish) {
-	    return;
-	}
-	while !save_files() {
-	    if wait_mins(1, &finish) {
-	        return;
-	    }
-	}
+        if wait_mins(5, &finish) {
+            return;
+        }
+        while !save_files() {
+            if wait_mins(1, &finish) {
+                return;
+            }
+        }
 
         // Lock the mutex, then tell the other thread to update the list
-	// Mutex is released implicitly when this loop scope ends.
-    update.store(true, Ordering::Relaxed);
+        // Mutex is released implicitly when this loop scope ends.
+        update.store(true, Ordering::Relaxed);
 
-	remove_old_files();
+        remove_old_files();
     }
 }

@@ -14,7 +14,7 @@ use time;
 use std::str;
 use std::fs;
 use std::iter::Iterator;
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool};
 
 use super::SPEED_SLOW;
@@ -36,8 +36,8 @@ struct Vertex {
 implement_vertex!(Vertex, position, colour, texture_pos);
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
-    
+pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
+
     let mut index = 0;
     let mut last_frame = time::now();
     let mut frame_time: usize = SPEED_MID;
@@ -49,16 +49,15 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
         .build_glium()
         .expect("Unable to create a window");
 
-    let bg_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + 
-                                                    ".background.png"));
-    let lc_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + 
-                                                    ".locations.png"));
+    let bg_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + ".background.png"));
+    let lc_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + ".locations.png"));
 
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
         const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
 
-        glium::Program::from_source(&display, VERT_SHADER, FRAG_SHADER, None).unwrap()
+        glium::Program::from_source(&display, VERT_SHADER, FRAG_SHADER, None)
+            .expect("Error creating shader program")
     };
 
     let vertices = vec![
@@ -68,19 +67,17 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
         Vertex { position: [ 1.0, -1.0], colour: [0.0; 3], texture_pos: [1.0, 0.0]},
     ];
 
-    let vertices = VertexBuffer::new(&display, &vertices).unwrap();
+    let vertices = VertexBuffer::new(&display, &vertices).expect("Error creating vertex buffer");
 
     let indices: Vec<u16> = vec![
         0, 2, 1,
         1, 3, 2,
     ];
 
-    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &indices).unwrap();
+    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &indices)
+        .expect("Error creating index buffer");
 
-    let params = DrawParameters {
-        blend: Blend::alpha_blending(),
-        ..Default::default()
-    };
+    let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
     let mut textures = create_textures_from_files(&display);
 
@@ -90,67 +87,72 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
         target.clear_color(0.0, 0.0, 0.0, 0.0);
 
         target.draw(&vertices,
-                    &indices,
-                    &program,
-                    &uniform! {
+                  &indices,
+                  &program,
+                  &uniform! {
                         tex: &bg_texture,
                     },
-                    &Default::default())
-            .unwrap();
+                  &Default::default())
+            .expect("Drawing Error");
 
-        
+
         target.draw(&vertices,
-                    &indices,
-                    &program,
-                    &uniform! {
+                  &indices,
+                  &program,
+                  &uniform! {
                         tex: &lc_texture,
                     },
-                    &params)
-            .unwrap();
+                  &params)
+            .expect("Drawing Error");
 
         target.draw(&vertices,
-                    &indices,
-                    &program,
-                    &uniform! {
+                  &indices,
+                  &program,
+                  &uniform! {
                         tex: &textures[index],
                     },
-                    &params)
-            .unwrap();
+                  &params)
+            .expect("Drawing Error");
 
-        target.finish().unwrap();
+        target.finish().expect("Frame Finishing Error");
 
         for ev in display.poll_events() {
             match ev {
-                glium::glutin::Event::Closed => {exit(finish); return},
-                
-                KeyboardInput(_, _, Some(key)) => {
+                glium::glutin::Event::Closed => {
+                    exit(finish);
+                    return;
+                }
 
+                KeyboardInput(_, _, Some(key)) => {
                     match key {
-                        Key::Escape => {exit(finish); return},
+                        Key::Escape => {
+                            exit(finish);
+                            return;
+                        }
                         Key::PageUp => frame_time = change_speed(frame_time, true),
                         Key::PageDown => frame_time = change_speed(frame_time, false),
                         _ => (),
                     }
-                },
+                }
                 _ => (),
             }
         }
 
         if (time::now() - last_frame).num_milliseconds() >= frame_time as i64 {
-            index = { 
-                if index + 1 < textures.len() { 
-                    index + 1 
-                } else { 
-                    0 
+            index = {
+                if index + 1 < textures.len() {
+                    index + 1
+                } else {
+                    0
                 }
             };
-            
+
             last_frame = time::now();
-        
-            //Check if we should update if we are looping over to the start again
+
+            // Check if we should update if we are looping over to the start again
             if index == 0 {
                 let update = update.swap(false, Ordering::Relaxed);
-                
+
                 if update {
                     add_last_texture(&display, &mut textures);
                 }
@@ -165,11 +167,13 @@ fn exit(terminate: &Arc<AtomicBool>) {
 }
 
 fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
-    let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
-    let mut file_names: Vec<_> = files.map(|e| e.unwrap()
-                                           .file_name()
-                                           .into_string()
-                                           .unwrap())
+    let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading image directory");
+    let mut file_names: Vec<_> = files.map(|e| {
+            e.expect("Error reading image filename")
+                .file_name()
+                .into_string()
+                .expect("Error extracting image filename")
+        })
         .collect();
 
     file_names.sort();
@@ -184,43 +188,45 @@ fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
         .collect()
 }
 
-fn add_last_texture(display: &glium::Display, vec: &mut Vec<Texture2d>){
-    let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
-    let mut file_names: Vec<_> = files.map(|e| e.unwrap()
-                                           .file_name()
-                                           .into_string()
-                                           .unwrap())
+fn add_last_texture(display: &glium::Display, vec: &mut Vec<Texture2d>) {
+    let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading image directory");
+    let mut file_names: Vec<_> = files.map(|e| {
+            e.expect("Error reading image filename")
+                .file_name()
+                .into_string()
+                .expect("Error extracting image filename")
+        })
         .collect();
 
     file_names.sort();
 
-    vec.push(texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + &file_names
-                                           .pop()
-                                           .unwrap())));
+    vec.push(texture_from_image(display,
+                                &(DOWNLOAD_FOLDER.to_string() +
+                                  &file_names.pop()
+                                    .expect("Error finding last image"))));
 }
 
 fn change_speed(current: usize, increase: bool) -> usize {
     if increase {
-        if current != SPEED_SLOW { 
-            SPEED_FAST 
-        } else { 
-            SPEED_MID 
+        if current == SPEED_SLOW {
+            SPEED_MID
+        } else {
+            SPEED_FAST
         }
-    } else if current != SPEED_FAST { 
-        SPEED_SLOW 
-    } else { 
-        SPEED_MID 
-    }    
+    } else if current == SPEED_FAST {
+        SPEED_MID
+    } else {
+        SPEED_SLOW
+    }
 }
 
 fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
-    let image = image::open(img).unwrap().to_rgba();
+    let image = image::open(img).expect("Error opening image file").to_rgba();
 
     let image_dim = image.dimensions();
 
     let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dim);
 
-    Texture2d::new(display, image).unwrap()
-    
-}
+    Texture2d::new(display, image).expect("Error creating texture from image")
 
+}
