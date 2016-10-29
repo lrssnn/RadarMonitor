@@ -3,7 +3,8 @@ use time;
 use std::str;
 use std::fs;
 use std::iter::Iterator;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use std::sync::atomic::{Ordering, AtomicBool};
 
 use sfml::graphics::{Color, RenderTarget, RenderWindow, Texture, Sprite};
 use sfml::window::{VideoMode, event, window_style, Key};
@@ -17,7 +18,7 @@ use super::DOWNLOAD_FOLDER;
 use super::IMAGES_KEPT;
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
+pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
     let mut current_index = 0;
 
     let mut last_frame = time::now();
@@ -69,8 +70,8 @@ pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
 	    
 	        //Check if we should update if we are looping over to the start again
 	        if current_index == 0 {
-	            let update = update.lock().unwrap();
-		    if *update {
+	            let update = update.load(Ordering::Relaxed);
+		    if update {
 		        reload = true;
 		    }
 	        }
@@ -79,9 +80,8 @@ pub fn open_window(finish: &Arc<Mutex<bool>>, update: &Arc<Mutex<bool>>){
     }
 }
 
-fn exit(terminate: &Arc<Mutex<bool>>) {
-    let mut terminate = terminate.lock().unwrap();  
-    *terminate = true;
+fn exit(terminate: &Arc<AtomicBool>) {
+    terminate.store(true, Ordering::Relaxed);
 }
 
 fn create_textures_from_files() -> Vec<Texture> {
@@ -92,11 +92,10 @@ fn create_textures_from_files() -> Vec<Texture> {
 
     if IMAGES_KEPT > 0 {
         let len = file_names.len();
-        let mut file_names = file_names.split_off(len - IMAGES_KEPT);
+        let file_names = file_names.split_off(len - IMAGES_KEPT);
     }
 
-    let textures: Vec<Texture> = file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect();
-    textures
+    file_names.iter().map(|e| Texture::new_from_file(&(DOWNLOAD_FOLDER.to_string() + e)).unwrap()).collect()
 }
 
 fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_index: usize) -> usize{
@@ -107,16 +106,6 @@ fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_i
 
 fn change_speed(current: usize, increase: bool) -> usize {
     if increase {
-        if current == SPEED_FAST {
-           return SPEED_MID;
-        } else {
-	    return SPEED_SLOW;
-	}
-    } else {
-        if current == SPEED_SLOW {
-	    return SPEED_MID;
-	} else {
-	    return SPEED_FAST;
-	}
-    } return SPEED_MID;
+        if current != SPEED_SLOW { SPEED_FAST } else { SPEED_MID }
+    } else if current != SPEED_FAST { SPEED_SLOW } else { SPEED_MID }    
 }

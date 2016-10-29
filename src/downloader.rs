@@ -8,7 +8,8 @@ use std::fs::File;
 use std::string::String;
 use std::thread::sleep;
 use std::time::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use std::sync::atomic::{AtomicBool, Ordering};
 use ftp::FtpStream;
 
 
@@ -85,28 +86,34 @@ fn correct_code_filter(name: &String) -> bool {
     name.contains(LOCATION_CODE) && !name.contains(".gif")
 }
 
-pub fn wait_mins(mins: usize, terminate: &Arc<Mutex<bool>>) -> bool{
+pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool{
     let mut secs = mins * 60;
     
     let one_sec = Duration::new(1, 0);
 
     while secs > 0 {
         if VERBOSE {
-	    print!("\rWaiting {} seconds...", secs);
+	    print!("\rWaiting {} seconds...     ", secs);
 	    std::io::stdout().flush().unwrap();
 	}
         
         sleep(one_sec);
 
-	let terminate = terminate.lock().unwrap();
-	if *terminate {
+	let terminate = terminate.load(Ordering::Relaxed);
+	if terminate {
 	    if VERBOSE { println!("")};
 	    return true;
 	}
 
 	secs -= 1;
     }
-    if VERBOSE { println!("")};
+    if VERBOSE { 
+        if mins == 1{
+            println!("\rWaited 1 minute.       ");
+        } else {
+            println!("\rWaited {} minutes.      ", mins);
+        }
+    }
     false
 }
 
@@ -115,8 +122,7 @@ pub fn init() {
     // Attempt to create the img/ directory
     // We don't care whether it works or not, if it fails the directory already exists: good
     match std::fs::create_dir(DOWNLOAD_FOLDER) {
-        Ok(_) => ..,
-	Err(_) => ..
+        _ => (),
     };
 
     let background_file_name = &(LOCATION_CODE.to_string() + ".background.png");
@@ -155,12 +161,12 @@ pub fn init() {
         };
 
 	// Get the files from the server
-	let background_file = match ftp_stream.simple_retr(&background_file_name){
+	let background_file = match ftp_stream.simple_retr(background_file_name){
 	    Ok(file) => file,
 	    Err(e) => {println!("Failed to get file: {}", e); return;}
 	};
 
-	let location_file = match ftp_stream.simple_retr(&location_file_name){
+	let location_file = match ftp_stream.simple_retr(location_file_name){
 	    Ok(file) => file,
 	    Err(e) => {println!("Failed to get file: {}", e); return;}
 	};
@@ -197,6 +203,6 @@ pub fn remove_old_files() {
         //Delete a file
 	let name = file_names.next().unwrap();
 	println!("List length: {}, target: {} Removing: {}", file_names.len(), IMAGES_KEPT, name);
-        fs::remove_file(name);
+        fs::remove_file(name).unwrap();
     }
 }

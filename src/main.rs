@@ -3,7 +3,8 @@ extern crate sfml;
 extern crate time;
 
 use std::thread;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use std::sync::atomic::{Ordering, AtomicBool};
 
 mod image_viewer;
 use image_viewer::open_window;
@@ -30,8 +31,8 @@ fn main() {
 
     // Create a boolean variable which we will send to the child thread when it is time to regenerate the texture list
     // and one which tells the main thread when the child thread has been closed
-    let finish = Arc::new(Mutex::new(false));
-    let update = Arc::new(Mutex::new(false));
+    let finish = Arc::new(AtomicBool::new(false));
+    let update = Arc::new(AtomicBool::new(false));
 
     // Cloning an Arc actually just gives us a new reference. We move this reference into the other thread
     // but it points to the same boolean we have here.
@@ -56,8 +57,7 @@ fn main() {
 
         // Lock the mutex, then tell the other thread to update the list
 	// Mutex is released implicitly when this loop scope ends.
-        let mut update = update.lock().unwrap();
-	*update = true;
+    update.store(true, Ordering::Relaxed);
 
 	remove_old_files();
     }
