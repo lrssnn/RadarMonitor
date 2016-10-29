@@ -35,26 +35,12 @@ struct Vertex {
 
 implement_vertex!(Vertex, position, colour, texture_pos);
 
-fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
-    let image = image::open(img).unwrap().to_rgba();
-
-    let image_dim = image.dimensions();
-
-    let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dim);
-
-    Texture2d::new(display, image).unwrap()
-    
-}
-
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
-    let mut current_index = 0;
-
+    
+    let mut index = 0;
     let mut last_frame = time::now();
-    let mut this_frame;
-
-
-    let mut time_per_frame: usize = SPEED_MID;
+    let mut frame_time: usize = SPEED_MID;
 
     // Open the window
     let display = glium::glutin::WindowBuilder::new()
@@ -96,80 +82,77 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>){
         ..Default::default()
     };
 
+    let mut textures = create_textures_from_files(&display);
 
     loop {
+        let mut target = display.draw();
 
-        let mut textures = create_textures_from_files(&display);
-        
-        println!("Received a list of {} textures", textures.len());
+        target.clear_color(0.0, 0.0, 0.0, 0.0);
 
-	    let mut reload = false;
-
-        while !reload {
-            let mut target = display.draw();
-
-            target.clear_color(0.0, 0.0, 0.0, 0.0);
-
-            target.draw(&vertices,
-                        &indices,
-                        &program,
-                        &uniform! {
-                            tex: &bg_texture,
-                        },
-                        &Default::default())
-                .unwrap();
-
-            
-            target.draw(&vertices,
-                        &indices,
-                        &program,
-                        &uniform! {
-                            tex: &lc_texture,
-                        },
-                        &params)
-                .unwrap();
-
-            target.draw(&vertices,
-                        &indices,
-                        &program,
-                        &uniform! {
-                            tex: &textures[current_index],
-                        },
-                        &params)
-                .unwrap();
-
-            target.finish().unwrap();
-
-            for ev in display.poll_events() {
-                match ev {
-                    glium::glutin::Event::Closed => {exit(finish); return},
-                    
-                    KeyboardInput(state, _, Some(key)) => {
-
-                        match key {
-                            Key::Escape => {exit(finish); return},
-                            Key::PageUp => time_per_frame = change_speed(time_per_frame, true),
-                            Key::PageDown => time_per_frame = change_speed(time_per_frame, false),
-                            _ => (),
-                        }
+        target.draw(&vertices,
+                    &indices,
+                    &program,
+                    &uniform! {
+                        tex: &bg_texture,
                     },
-                    _ => (),
-                }
-            }
+                    &Default::default())
+            .unwrap();
 
-            this_frame = time::now();
+        
+        target.draw(&vertices,
+                    &indices,
+                    &program,
+                    &uniform! {
+                        tex: &lc_texture,
+                    },
+                    &params)
+            .unwrap();
 
-            if (this_frame - last_frame).num_milliseconds() >= time_per_frame as i64 {
-                current_index = if current_index + 1 < textures.len() { current_index + 1 } else { 0 };
-                last_frame = time::now();
-            
-                //Check if we should update if we are looping over to the start again
-                if current_index == 0 {
-                    let update = update.swap(false, Ordering::Relaxed);
-                    
-                    if update {
-                        reload = true;
+        target.draw(&vertices,
+                    &indices,
+                    &program,
+                    &uniform! {
+                        tex: &textures[index],
+                    },
+                    &params)
+            .unwrap();
+
+        target.finish().unwrap();
+
+        for ev in display.poll_events() {
+            match ev {
+                glium::glutin::Event::Closed => {exit(finish); return},
+                
+                KeyboardInput(_, _, Some(key)) => {
+
+                    match key {
+                        Key::Escape => {exit(finish); return},
+                        Key::PageUp => frame_time = change_speed(frame_time, true),
+                        Key::PageDown => frame_time = change_speed(frame_time, false),
+                        _ => (),
                     }
+                },
+                _ => (),
+            }
+        }
+
+        if (time::now() - last_frame).num_milliseconds() >= frame_time as i64 {
+            index = { 
+                if index + 1 < textures.len() { 
+                    index + 1 
+                } else { 
+                    0 
+                }
+            };
+            
+            last_frame = time::now();
+        
+            //Check if we should update if we are looping over to the start again
+            if index == 0 {
+                let update = update.swap(false, Ordering::Relaxed);
+                
+                if update {
+                    add_last_texture(&display, &mut textures);
                 }
             }
         }
@@ -182,33 +165,62 @@ fn exit(terminate: &Arc<AtomicBool>) {
 }
 
 fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
-    // Get a list of filenames in the folder
-    println!("Reading file system");
     let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
-    println!("Extracting Filenames");
-    let mut file_names: Vec<_> = files.map(|e| e.unwrap().file_name().into_string().unwrap()).collect();
-    println!("Sorting names");
+    let mut file_names: Vec<_> = files.map(|e| e.unwrap()
+                                           .file_name()
+                                           .into_string()
+                                           .unwrap())
+        .collect();
+
     file_names.sort();
 
     if IMAGES_KEPT > 0 {
         let len = file_names.len();
-        let file_names = file_names.split_off(len - IMAGES_KEPT);
+        file_names = file_names.split_off(len - IMAGES_KEPT);
     }
 
-    println!("Creating textures...");
-    file_names.iter().map(|e| texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e))).collect()
+    file_names.iter()
+        .map(|e| texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e)))
+        .collect()
 }
 
-/*
-fn next_image<'a>(sprite: &mut Sprite<'a>, textures: &'a Vec<Texture>, current_index: usize) -> usize{
-    let index = if current_index + 1 < textures.len() { current_index + 1 } else { 0 };
-    sprite.set_texture(&textures[index], true);
-    index
+fn add_last_texture(display: &glium::Display, vec: &mut Vec<Texture2d>){
+    let files = fs::read_dir(DOWNLOAD_FOLDER).unwrap();
+    let mut file_names: Vec<_> = files.map(|e| e.unwrap()
+                                           .file_name()
+                                           .into_string()
+                                           .unwrap())
+        .collect();
+
+    file_names.sort();
+
+    vec.push(texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + &file_names
+                                           .pop()
+                                           .unwrap())));
 }
-*/
 
 fn change_speed(current: usize, increase: bool) -> usize {
     if increase {
-        if current != SPEED_SLOW { SPEED_FAST } else { SPEED_MID }
-    } else if current != SPEED_FAST { SPEED_SLOW } else { SPEED_MID }    
+        if current != SPEED_SLOW { 
+            SPEED_FAST 
+        } else { 
+            SPEED_MID 
+        }
+    } else if current != SPEED_FAST { 
+        SPEED_SLOW 
+    } else { 
+        SPEED_MID 
+    }    
 }
+
+fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
+    let image = image::open(img).unwrap().to_rgba();
+
+    let image_dim = image.dimensions();
+
+    let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dim);
+
+    Texture2d::new(display, image).unwrap()
+    
+}
+

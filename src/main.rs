@@ -1,3 +1,5 @@
+#![allow(missing_docs_in_private_items)]
+
 extern crate ftp;
 extern crate time;
 #[macro_use]
