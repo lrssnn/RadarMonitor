@@ -12,7 +12,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use ftp::FtpStream;
 
-
 use super::VERBOSE;
 use super::DOWNLOAD_FOLDER;
 use super::LOCATION_CODE;
@@ -94,7 +93,6 @@ pub fn save_files() -> bool {
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
-
 
     downloads
 }
@@ -206,8 +204,10 @@ pub fn init() {
         };
 
         // Create a new file locally (overwriting if already exists)
-        let mut bg_file = File::create(background_file_name).expect("Error creating file on disk");
-        let mut lc_file = File::create(location_file_name).expect("Error creating file on disk");
+        let mut bg_file = File::create(background_file_name)
+            .expect("Error creating file on disk");
+        let mut lc_file = File::create(location_file_name)
+            .expect("Error creating file on disk");
 
         // Write the files
         bg_file.write_all(background_file.into_inner().as_slice())
@@ -249,6 +249,6 @@ pub fn remove_old_files() {
                  file_names.len(),
                  IMAGES_KEPT,
                  name);
-        fs::remove_file(name).expect("Error deleting file");
+        fs::remove_file(DOWNLOAD_FOLDER.to_string() + name).expect("Error deleting file");
     }
 }
