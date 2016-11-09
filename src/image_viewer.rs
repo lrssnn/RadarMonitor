@@ -154,7 +154,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                 let update = update.swap(false, Ordering::Relaxed);
 
                 if update {
-                    add_last_texture(&display, &mut textures);
+                    add_new_textures(&display, &mut textures);
                 }
             }
         }
@@ -184,11 +184,19 @@ fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
     }
 
     file_names.iter()
-        .map(|e| texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e)))
+        .map(|e| {
+            let r = texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e));
+            let mut new_name = e.clone();
+            new_name.remove(0);
+            fs::rename(&(DOWNLOAD_FOLDER.to_string() + &e), 
+                       &(DOWNLOAD_FOLDER.to_string() + &new_name))
+                .expect("Error renaming file");
+            r
+        })
         .collect()
 }
 
-fn add_last_texture(display: &glium::Display, vec: &mut Vec<Texture2d>) {
+fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>) {
     let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading image directory");
     let mut file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading image filename")
@@ -198,12 +206,18 @@ fn add_last_texture(display: &glium::Display, vec: &mut Vec<Texture2d>) {
         })
         .collect();
 
+    let mut file_names = file_names.iter().filter(|e| e.starts_with('x')).collect::<Vec<_>>();
+
     file_names.sort();
 
-    vec.push(texture_from_image(display,
-                                &(DOWNLOAD_FOLDER.to_string() +
-                                  &file_names.pop()
-                                    .expect("Error finding last image"))));
+    for file_name in file_names {
+        vec.push(texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + &file_name)));
+        let mut new_name = file_name.clone();
+        new_name.remove(0);
+        fs::rename(&(DOWNLOAD_FOLDER.to_string() + &file_name),
+                   &(DOWNLOAD_FOLDER.to_string() + &new_name))
+            .expect("Error renaming file");
+    }
 }
 
 fn change_speed(current: usize, increase: bool) -> usize {

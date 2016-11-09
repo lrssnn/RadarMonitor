@@ -64,6 +64,8 @@ pub fn save_files() -> bool {
 
     for file_name in filenames {
 
+        let file_name_x = "x".to_string() + &file_name;
+
         // Check if the file already exists locally.
         // Open will return an error if it does not exist, so err = good.
         match File::open(DOWNLOAD_FOLDER.to_string() + &file_name) {
@@ -80,8 +82,9 @@ pub fn save_files() -> bool {
             }
         };
 
+
         // Create a new file locally (overwriting if already exists)
-        let mut file = File::create(DOWNLOAD_FOLDER.to_string() + &file_name)
+        let mut file = File::create(DOWNLOAD_FOLDER.to_string() + &file_name_x)
             .expect("Error creating file on disk");
 
         // Write the file
@@ -136,6 +139,9 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
 
 // Save the radar background if it is not already present
 pub fn init() {
+
+    fs::remove_dir_all(DOWNLOAD_FOLDER);
+
     // Attempt to create the img/ directory
     // We don't care whether it works or not, if it fails the directory already exists: good
     match std::fs::create_dir(DOWNLOAD_FOLDER) {
@@ -217,7 +223,6 @@ pub fn init() {
         // Disconnect from the server
         let _ = ftp_stream.quit();
     }
-
 }
 
 pub fn remove_old_files() {
