@@ -76,7 +76,7 @@ pub fn save_files(lc_code: &str) -> bool {
 
         // Check if the file already exists locally.
         // Open will return an error if it does not exist, so err = good.
-        match File::open(DL_DIR.to_string() + &file_name) {
+        match File::open(DL_DIR.to_string() + lc_code + "/" + &file_name) {
             Ok(_) => continue,
             Err(_) => println!("Choosing to download '{}'", file_name),
         };
