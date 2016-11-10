@@ -8,6 +8,7 @@ use glium::draw_parameters::{DrawParameters, Blend};
 
 use glium::glutin::Event::KeyboardInput;
 use glium::glutin::VirtualKeyCode as Key;
+use glium::glutin::ElementState;
 
 use time;
 
@@ -20,8 +21,10 @@ use std::sync::atomic::{Ordering, AtomicBool};
 use super::SPEED_SLOW;
 use super::SPEED_MID;
 use super::SPEED_FAST;
-use super::LOCATION_CODE;
-use super::DOWNLOAD_FOLDER;
+use super::CODE_LOW;
+use super::CODE_MID;
+use super::CODE_HIGH;
+use super::DL_DIR;
 use super::IMAGES_KEPT;
 
 extern crate image;
@@ -49,8 +52,16 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         .build_glium()
         .expect("Unable to create a window");
 
-    let bg_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + ".background.png"));
-    let lc_texture = texture_from_image(&display, &(LOCATION_CODE.to_string() + ".locations.png"));
+    let bg_textures = [
+        texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
+        texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
+        texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png")),
+    ];
+    let lc_textures = [
+        texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
+        texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
+        texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png")),
+    ];
 
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
@@ -79,7 +90,9 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
-    let mut textures = create_textures_from_files(&display);
+    let mut textures = create_all_textures_from_files(&display);
+
+    let mut zoom = 1;
 
     loop {
         let mut target = display.draw();
@@ -90,7 +103,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                   &indices,
                   &program,
                   &uniform! {
-                        tex: &bg_texture,
+                        tex: &bg_textures[zoom],
                     },
                   &Default::default())
             .expect("Drawing Error");
@@ -100,7 +113,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                   &indices,
                   &program,
                   &uniform! {
-                        tex: &lc_texture,
+                        tex: &lc_textures[zoom],
                     },
                   &params)
             .expect("Drawing Error");
@@ -109,7 +122,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                   &indices,
                   &program,
                   &uniform! {
-                        tex: &textures[index],
+                        tex: &textures[zoom][index],
                     },
                   &params)
             .expect("Drawing Error");
@@ -123,7 +136,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                     return;
                 }
 
-                KeyboardInput(_, _, Some(key)) => {
+                KeyboardInput(ElementState::Released, _, Some(key)) => {
                     match key {
                         Key::Escape => {
                             exit(finish);
@@ -131,6 +144,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         }
                         Key::PageUp => frame_time = change_speed(frame_time, true),
                         Key::PageDown => frame_time = change_speed(frame_time, false),
+                        Key::LBracket => zoom = change_zoom(zoom, false),
+                        Key::RBracket => zoom = change_zoom(zoom, true),
                         _ => (),
                     }
                 }
@@ -140,7 +155,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
         if (time::now() - last_frame).num_milliseconds() >= frame_time as i64 {
             index = {
-                if index + 1 < textures.len() {
+                if index + 1 < textures[zoom].len() {
                     index + 1
                 } else {
                     0
@@ -154,7 +169,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                 let update = update.swap(false, Ordering::Relaxed);
 
                 if update {
-                    add_new_textures(&display, &mut textures);
+                    add_all_new_textures(&display, &mut textures);
                 }
             }
         }
@@ -166,8 +181,31 @@ fn exit(terminate: &Arc<AtomicBool>) {
     terminate.store(true, Ordering::Relaxed);
 }
 
-fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
-    let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading image directory");
+fn change_zoom(zoom: usize, faster: bool) -> usize {
+   if faster {
+       if zoom == 0 {
+           1 
+       } else {
+           2
+       }
+   } else {
+       if zoom == 2 {
+           1
+       } else {
+           0 
+       }
+   }
+}
+
+fn create_all_textures_from_files(display: &glium::Display) -> [Vec<Texture2d>; 3] {
+    [create_textures_from_files(display, CODE_LOW),
+    create_textures_from_files(display, CODE_MID),
+    create_textures_from_files(display, CODE_HIGH)]
+}
+
+fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Texture2d> {
+    let dir = &(DL_DIR.to_string() + lc_code + "/");
+    let files = fs::read_dir(dir).expect("Error reading image directory");
     let mut file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading image filename")
                 .file_name()
@@ -185,19 +223,28 @@ fn create_textures_from_files(display: &glium::Display) -> Vec<Texture2d> {
 
     file_names.iter()
         .map(|e| {
-            let r = texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + e));
+            let r = texture_from_image(display, &(dir.to_string() + e));
             let mut new_name = e.clone();
             new_name.remove(0);
-            fs::rename(&(DOWNLOAD_FOLDER.to_string() + &e), 
-                       &(DOWNLOAD_FOLDER.to_string() + &new_name))
+            fs::rename(&(dir.to_string() + &e), 
+                       &(dir.to_string() + &new_name))
                 .expect("Error renaming file");
             r
         })
         .collect()
 }
 
-fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>) {
-    let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading image directory");
+fn add_all_new_textures(display: &glium::Display, vecs: &mut [Vec<Texture2d>; 3]) {
+    add_new_textures(display, &mut vecs[0], CODE_LOW);
+    add_new_textures(display, &mut vecs[1], CODE_MID);
+    add_new_textures(display, &mut vecs[2], CODE_HIGH);
+}
+
+fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code: &str) {
+    let dir = &(DL_DIR.to_string() + lc_code + "/");
+    let files = fs::read_dir(&dir)
+        .expect("Error reading image directory");
+
     let mut file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading image filename")
                 .file_name()
@@ -211,11 +258,11 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>) {
     file_names.sort();
 
     for file_name in file_names {
-        vec.push(texture_from_image(display, &(DOWNLOAD_FOLDER.to_string() + &file_name)));
+        vec.push(texture_from_image(display, &(dir.to_string() + &file_name)));
         let mut new_name = file_name.clone();
         new_name.remove(0);
-        fs::rename(&(DOWNLOAD_FOLDER.to_string() + &file_name),
-                   &(DOWNLOAD_FOLDER.to_string() + &new_name))
+        fs::rename(&(dir.to_string() + &file_name),
+                   &(dir.to_string() + &new_name))
             .expect("Error renaming file");
     }
 }

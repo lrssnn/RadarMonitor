@@ -13,13 +13,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use ftp::FtpStream;
 
 use super::VERBOSE;
-use super::DOWNLOAD_FOLDER;
-use super::LOCATION_CODE;
+use super::DL_DIR;
+use super::CODE_MID;
+use super::CODE_LOW;
+use super::CODE_HIGH;
 use super::IMAGES_KEPT;
 
+pub fn save_all_files() -> bool {
+    let a = save_files(CODE_LOW);
+    let b = save_files(CODE_MID);
+    let c = save_files(CODE_HIGH);
+    a || b || c
+}
 // Connect to the BOM ftp server, get the radar files and save them as file_name locally.
 // Returns whether or not any files were downloaded.
-pub fn save_files() -> bool {
+pub fn save_files(lc_code: &str) -> bool {
 
     let mut downloads = false;
 
@@ -60,7 +68,7 @@ pub fn save_files() -> bool {
     };
 
     // Retain only the correct files (right prefix and right filetype)
-    filenames.retain(correct_code_filter);
+    filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
 
     for file_name in filenames {
 
@@ -68,7 +76,7 @@ pub fn save_files() -> bool {
 
         // Check if the file already exists locally.
         // Open will return an error if it does not exist, so err = good.
-        match File::open(DOWNLOAD_FOLDER.to_string() + &file_name) {
+        match File::open(DL_DIR.to_string() + &file_name) {
             Ok(_) => continue,
             Err(_) => println!("Choosing to download '{}'", file_name),
         };
@@ -84,7 +92,7 @@ pub fn save_files() -> bool {
 
 
         // Create a new file locally (overwriting if already exists)
-        let mut file = File::create(DOWNLOAD_FOLDER.to_string() + &file_name_x)
+        let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name_x)
             .expect("Error creating file on disk");
 
         // Write the file
@@ -100,8 +108,8 @@ pub fn save_files() -> bool {
     downloads
 }
 
-fn correct_code_filter(name: &String) -> bool {
-    name.contains(LOCATION_CODE) && !name.contains(".gif")
+fn correct_code_filter(name: &String, lc_code: &str) -> bool {
+    name.contains(lc_code) && !name.contains(".gif")
 }
 
 pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
@@ -137,92 +145,80 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
     false
 }
 
-// Save the radar background if it is not already present
 pub fn init() {
+    fs::remove_dir_all(DL_DIR).expect("Error clearing existing image directory");
+    fs::create_dir(DL_DIR).expect("Error creating image directory");
 
-    fs::remove_dir_all(DOWNLOAD_FOLDER);
+    init_background(CODE_LOW);
+    init_background(CODE_MID);
+    init_background(CODE_HIGH);
+}
 
-    // Attempt to create the img/ directory
-    // We don't care whether it works or not, if it fails the directory already exists: good
-    match std::fs::create_dir(DOWNLOAD_FOLDER) {
-        _ => (),
+// Save the radar background if it is not already present
+pub fn init_background(lc_code: &str) {
+
+    fs::create_dir(DL_DIR.to_string() + lc_code + "/").expect("Error creating image directory");
+
+    let background_file_name = &(lc_code.to_string() + ".background.png");
+    let location_file_name = &(lc_code.to_string() + ".locations.png");
+
+    // Connect to the server
+    let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21") {
+        Ok(s) => s,
+        Err(e) => {
+            println!("Failed to connect to server: {}", e);
+            return;
+        }
     };
 
-    let background_file_name = &(LOCATION_CODE.to_string() + ".background.png");
-    let location_file_name = &(LOCATION_CODE.to_string() + ".locations.png");
-    // Check if the files are present
-    let mut missing = false;
-
-    match File::open(background_file_name) {
-        Ok(_) => println!("Background file already exists: {}", background_file_name), 
-        Err(_) => missing = true,
+    // Login anonymously
+    match ftp_stream.login("anonymous", "guest") {
+        Ok(_) => (),
+        Err(e) => {
+            println!("Failed to log in: {}", e);
+            return;
+        }
     };
 
-    match File::open(location_file_name) {
-        Ok(_) => println!("Locations file already exists"),
-        Err(_) => missing = true,
+    // Change to the required directory
+    match ftp_stream.cwd("anon/gen/radar_transparencies") {
+        Ok(_) => (),
+        Err(e) => {
+            println!("Failed to navigate to directory: {}", e);
+            return;
+        }
     };
 
-    // Redownload if missing
-    if missing {
-        // Connect to the server
-        let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21") {
-            Ok(s) => s,
-            Err(e) => {
-                println!("Failed to connect to server: {}", e);
-                return;
-            }
-        };
+    // Get the files from the server
+    let background_file = match ftp_stream.simple_retr(background_file_name) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("Failed to get file: {}", e);
+            return;
+        }
+    };
 
-        // Login anonymously
-        match ftp_stream.login("anonymous", "guest") {
-            Ok(_) => (),
-            Err(e) => {
-                println!("Failed to log in: {}", e);
-                return;
-            }
-        };
+    let location_file = match ftp_stream.simple_retr(location_file_name) {
+        Ok(file) => file,
+        Err(e) => {
+            println!("Failed to get file: {}", e);
+            return;
+        }
+    };
 
-        // Change to the required directory
-        match ftp_stream.cwd("anon/gen/radar_transparencies") {
-            Ok(_) => (),
-            Err(e) => {
-                println!("Failed to navigate to directory: {}", e);
-                return;
-            }
-        };
+    // Create a new file locally (overwriting if already exists)
+    let mut bg_file = File::create(background_file_name)
+        .expect("Error creating file on disk");
+    let mut lc_file = File::create(location_file_name)
+        .expect("Error creating file on disk");
 
-        // Get the files from the server
-        let background_file = match ftp_stream.simple_retr(background_file_name) {
-            Ok(file) => file,
-            Err(e) => {
-                println!("Failed to get file: {}", e);
-                return;
-            }
-        };
-
-        let location_file = match ftp_stream.simple_retr(location_file_name) {
-            Ok(file) => file,
-            Err(e) => {
-                println!("Failed to get file: {}", e);
-                return;
-            }
-        };
-
-        // Create a new file locally (overwriting if already exists)
-        let mut bg_file = File::create(background_file_name)
-            .expect("Error creating file on disk");
-        let mut lc_file = File::create(location_file_name)
-            .expect("Error creating file on disk");
-
-        // Write the files
-        bg_file.write_all(background_file.into_inner().as_slice())
-            .expect("Error writing file to disk");
-        lc_file.write_all(location_file.into_inner().as_slice())
-            .expect("Error writing file to disk");
-        // Disconnect from the server
-        let _ = ftp_stream.quit();
-    }
+    // Write the files
+    bg_file.write_all(background_file.into_inner().as_slice())
+        .expect("Error writing file to disk");
+    lc_file.write_all(location_file.into_inner().as_slice())
+        .expect("Error writing file to disk");
+    // Disconnect from the server
+    let _ = ftp_stream.quit();
 }
 
 pub fn remove_old_files() {
@@ -232,7 +228,7 @@ pub fn remove_old_files() {
     }
 
     // Get a list of every file in the image folder
-    let files = fs::read_dir(DOWNLOAD_FOLDER).expect("Error reading file system");
+    let files = fs::read_dir(DL_DIR).expect("Error reading file system");
 
     let mut file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading file system")
@@ -254,6 +250,6 @@ pub fn remove_old_files() {
                  file_names.len(),
                  IMAGES_KEPT,
                  name);
-        fs::remove_file(DOWNLOAD_FOLDER.to_string() + name).expect("Error deleting file");
+        fs::remove_file(DL_DIR.to_string() + name).expect("Error deleting file");
     }
 }
