@@ -48,6 +48,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     // Open the window
     let display = glium::glutin::WindowBuilder::new()
         .with_dimensions(512, 512)
+        .with_min_dimensions(512, 512)
+        .with_max_dimensions(512, 512)
         .with_title("Radar Monitor")
         .build_glium()
         .expect("Unable to create a window");

@@ -23,9 +23,9 @@ const CODE_MID: &'static str = "IDR043"; // BOM product code for the desired rad
 const CODE_HIGH: &'static str = "IDR044"; 
 
 // Milliseconds per frame
-const SPEED_SLOW: usize = 300;
-const SPEED_MID: usize = 200;
-const SPEED_FAST: usize = 100;
+const SPEED_SLOW: usize = 200;
+const SPEED_MID: usize = 100;
+const SPEED_FAST: usize = 60;
 
 // Main function.
 fn main() {
