@@ -5,7 +5,6 @@ use std::str;
 use std::io::prelude::*;
 use std::fs;
 use std::fs::File;
-use std::string::String;
 use std::thread::sleep;
 use std::time::Duration;
 use std::sync::Arc;
@@ -106,10 +105,6 @@ pub fn save_files(lc_code: &str) -> bool {
     let _ = ftp_stream.quit();
 
     downloads
-}
-
-fn correct_code_filter(name: &String, lc_code: &str) -> bool {
-    name.contains(lc_code) && !name.contains(".gif")
 }
 
 pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {

@@ -226,7 +226,7 @@ fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Te
             let r = texture_from_image(display, &(dir.to_string() + e));
             let mut new_name = e.clone();
             new_name.remove(0);
-            fs::rename(&(dir.to_string() + &e), 
+            fs::rename(&(dir.to_string() + e), 
                        &(dir.to_string() + &new_name))
                 .expect("Error renaming file");
             r
@@ -245,7 +245,7 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
     let files = fs::read_dir(&dir)
         .expect("Error reading image directory");
 
-    let mut file_names: Vec<_> = files.map(|e| {
+    let file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading image filename")
                 .file_name()
                 .into_string()
@@ -258,10 +258,10 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
     file_names.sort();
 
     for file_name in file_names {
-        vec.push(texture_from_image(display, &(dir.to_string() + &file_name)));
+        vec.push(texture_from_image(display, &(dir.to_string() + file_name)));
         let mut new_name = file_name.clone();
         new_name.remove(0);
-        fs::rename(&(dir.to_string() + &file_name),
+        fs::rename(&(dir.to_string() + file_name),
                    &(dir.to_string() + &new_name))
             .expect("Error renaming file");
     }
