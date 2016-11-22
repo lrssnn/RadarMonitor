@@ -31,7 +31,6 @@ const SPEED_FAST: usize = 100;
 fn main() {
 
     init();
-    save_all_files();
 
     // Create a boolean variable which we will send to the child thread when it is time to 
     // regenerate the texture list and one which tells the main thread when the child

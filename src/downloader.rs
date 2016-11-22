@@ -141,18 +141,29 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
 }
 
 pub fn init() {
-    fs::remove_dir_all(DL_DIR).expect("Error clearing existing image directory");
-    fs::create_dir(DL_DIR).expect("Error creating image directory");
+    match fs::create_dir(DL_DIR){
+        Ok(_) => (),
+        Err(_) => (),
+    };
 
     init_background(CODE_LOW);
     init_background(CODE_MID);
     init_background(CODE_HIGH);
+    
+    save_all_files();
+
+    mark_files_as_new(CODE_LOW);
+    mark_files_as_new(CODE_MID);
+    mark_files_as_new(CODE_HIGH);
 }
 
 // Save the radar background if it is not already present
 pub fn init_background(lc_code: &str) {
 
-    fs::create_dir(DL_DIR.to_string() + lc_code + "/").expect("Error creating image directory");
+    match fs::create_dir(DL_DIR.to_string() + lc_code + "/"){
+        Ok(_) => (),
+        Err(_) => (),
+    };
 
     let background_file_name = &(lc_code.to_string() + ".background.png");
     let location_file_name = &(lc_code.to_string() + ".locations.png");
@@ -246,5 +257,31 @@ pub fn remove_old_files() {
                  IMAGES_KEPT,
                  name);
         fs::remove_file(DL_DIR.to_string() + name).expect("Error deleting file");
+    }
+}
+
+fn mark_files_as_new(location_code: &str){
+    let dir = DL_DIR.to_string() + location_code + "/";
+    let mut files = fs::read_dir(&dir).unwrap();
+
+    let file_names: Vec<_> = files.map(|e| {
+           e.expect("Error reading image filename")
+               .file_name()
+               .into_string()
+               .expect("Error extracting image filename")
+       })
+       .collect();
+
+   println!("Existing Files for location code '{}'", location_code);
+    let mut file_names = file_names.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
+
+    file_names.sort();
+
+    for file_name in file_names {
+        println!("{}", file_name);
+        let new_name = "x".to_string() + file_name;
+        fs::rename(&(dir.to_string() + file_name),
+                   &(dir.to_string() + &new_name))
+            .expect("Error renaming file");
     }
 }
