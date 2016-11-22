@@ -20,7 +20,7 @@ const DL_DIR: &'static str = "img/"; // Folder to keep images in. Relative to st
 
 const CODE_LOW: &'static str = "IDR042";
 const CODE_MID: &'static str = "IDR043"; // BOM product code for the desired radar image set
-const CODE_HIGH: &'static str = "IDR044"; 
+const CODE_HIGH: &'static str = "IDR044";
 
 // Milliseconds per frame
 const SPEED_SLOW: usize = 200;
@@ -32,13 +32,13 @@ fn main() {
 
     init();
 
-    // Create a boolean variable which we will send to the child thread when it is time to 
+    // Create a boolean variable which we will send to the child thread when it is time to
     // regenerate the texture list and one which tells the main thread when the child
     // thread has been closed
     let update = Arc::new(AtomicBool::new(false));
     let finish = Arc::new(AtomicBool::new(false));
 
-    // Cloning an Arc actually just gives us a new reference. We move this reference into 
+    // Cloning an Arc actually just gives us a new reference. We move this reference into
     // the other thread but it points to the same boolean we have here.
     let finish_clone = finish.clone();
     let update_clone = update.clone();
@@ -49,7 +49,7 @@ fn main() {
     });
 
     loop {
-        // Wait for 5 minutes, then check the server every minute until we get at least 
+        // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
         if wait_mins(5, &finish) {
             return;

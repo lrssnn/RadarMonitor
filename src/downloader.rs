@@ -78,9 +78,11 @@ pub fn save_files(lc_code: &str) -> bool {
         match File::open(DL_DIR.to_string() + lc_code + "/" + &file_name) {
             Ok(_) => continue,
             Err(_) => {
-                print!("\r({:02}) Choosing to download '{}'", downloads+1, file_name);
+                print!("\r({:02}) Choosing to download '{}'",
+                       downloads + 1,
+                       file_name);
                 std::io::stdout().flush().expect("Error flushing stdout");
-            },
+            }
         };
 
         // Get the file from the server
@@ -106,7 +108,7 @@ pub fn save_files(lc_code: &str) -> bool {
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
-    if downloads > 0{
+    if downloads > 0 {
         println!("");
     }
 
@@ -147,15 +149,14 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
 }
 
 pub fn init() {
-    match fs::create_dir(DL_DIR){
-        Ok(_) => (),
-        Err(_) => (),
+    match fs::create_dir(DL_DIR) {
+        Ok(_) | Err(_) => (),
     };
 
     init_background(CODE_LOW);
     init_background(CODE_MID);
     init_background(CODE_HIGH);
-    
+
     save_all_files();
 
     mark_files_as_new(CODE_LOW);
@@ -166,9 +167,8 @@ pub fn init() {
 // Save the radar background if it is not already present
 pub fn init_background(lc_code: &str) {
 
-    match fs::create_dir(DL_DIR.to_string() + lc_code + "/"){
-        Ok(_) => (),
-        Err(_) => (),
+    match fs::create_dir(DL_DIR.to_string() + lc_code + "/") {
+        Ok(_) | Err(_) => (),
     };
 
     let background_file_name = &(lc_code.to_string() + ".background.png");
@@ -219,10 +219,8 @@ pub fn init_background(lc_code: &str) {
     };
 
     // Create a new file locally (overwriting if already exists)
-    let mut bg_file = File::create(background_file_name)
-        .expect("Error creating file on disk");
-    let mut lc_file = File::create(location_file_name)
-        .expect("Error creating file on disk");
+    let mut bg_file = File::create(background_file_name).expect("Error creating file on disk");
+    let mut lc_file = File::create(location_file_name).expect("Error creating file on disk");
 
     // Write the files
     bg_file.write_all(background_file.into_inner().as_slice())
@@ -266,19 +264,19 @@ pub fn remove_old_files() {
     }
 }
 
-fn mark_files_as_new(location_code: &str){
+fn mark_files_as_new(location_code: &str) {
     let dir = DL_DIR.to_string() + location_code + "/";
-    let mut files = fs::read_dir(&dir).unwrap();
+    let files: Vec<_> = fs::read_dir(&dir)
+        .expect("Error reading directory")
+        .map(|e| {
+            e.expect("Error reading image filename")
+                .file_name()
+                .into_string()
+                .expect("Error extracting image filename")
+        })
+        .collect();
 
-    let file_names: Vec<_> = files.map(|e| {
-           e.expect("Error reading image filename")
-               .file_name()
-               .into_string()
-               .expect("Error extracting image filename")
-       })
-       .collect();
-
-    let mut file_names = file_names.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
+    let mut file_names = files.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
 
     file_names.sort();
 

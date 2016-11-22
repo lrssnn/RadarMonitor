@@ -52,16 +52,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         .build_glium()
         .expect("Unable to create a window");
 
-    let bg_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
-        texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
-        texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png")),
-    ];
-    let lc_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
-        texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
-        texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png")),
-    ];
+    let bg_textures = [texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
+                       texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
+                       texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png"))];
+    let lc_textures = [texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
+                       texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
+                       texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png"))];
 
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
@@ -144,14 +140,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         }
                         Key::PageUp => frame_time = change_speed(frame_time, true),
                         Key::PageDown => frame_time = change_speed(frame_time, false),
-                        Key::LBracket => zoom = change_zoom(zoom, false),
-                        Key::RBracket => zoom = change_zoom(zoom, true),
-                        Key::End => zoom = change_zoom(zoom, false),
-                        Key::Home => zoom = change_zoom(zoom, true),
-		    	_ => ()
+                        Key::LBracket | Key::End => zoom = change_zoom(zoom, false),
+                        Key::RBracket | Key::Home => zoom = change_zoom(zoom, true),
+                        _ => (),
                     }
                 }
-                ev => (println!("{:?}", ev)),
+                _ => (),
             }
         }
 
@@ -184,25 +178,23 @@ fn exit(terminate: &Arc<AtomicBool>) {
 }
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
-   if faster {
-       if zoom == 0 {
-           1 
-       } else {
-           2
-       }
-   } else {
-       if zoom == 2 {
-           1
-       } else {
-           0 
-       }
-   }
+    if faster {
+        if zoom == 0 {
+            1
+        } else {
+            2
+        }
+    } else if zoom == 2 {
+        1
+    } else {
+        0
+    }
 }
 
 fn create_all_textures_from_files(display: &glium::Display) -> [Vec<Texture2d>; 3] {
     [create_textures_from_files(display, CODE_LOW),
-    create_textures_from_files(display, CODE_MID),
-    create_textures_from_files(display, CODE_HIGH)]
+     create_textures_from_files(display, CODE_MID),
+     create_textures_from_files(display, CODE_HIGH)]
 }
 
 fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Texture2d> {
@@ -228,8 +220,7 @@ fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Te
             let r = texture_from_image(display, &(dir.to_string() + e));
             let mut new_name = e.clone();
             new_name.remove(0);
-            fs::rename(&(dir.to_string() + e), 
-                       &(dir.to_string() + &new_name))
+            fs::rename(&(dir.to_string() + e), &(dir.to_string() + &new_name))
                 .expect("Error renaming file");
             r
         })
@@ -244,8 +235,7 @@ fn add_all_new_textures(display: &glium::Display, vecs: &mut [Vec<Texture2d>; 3]
 
 fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code: &str) {
     let dir = &(DL_DIR.to_string() + lc_code + "/");
-    let files = fs::read_dir(&dir)
-        .expect("Error reading image directory");
+    let files = fs::read_dir(&dir).expect("Error reading image directory");
 
     let file_names: Vec<_> = files.map(|e| {
             e.expect("Error reading image filename")
