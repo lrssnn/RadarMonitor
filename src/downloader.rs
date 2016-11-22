@@ -28,7 +28,7 @@ pub fn save_all_files() -> bool {
 // Returns whether or not any files were downloaded.
 pub fn save_files(lc_code: &str) -> bool {
 
-    let mut downloads = false;
+    let mut downloads = 0;
 
     // Connect to the server
     let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21") {
@@ -77,14 +77,17 @@ pub fn save_files(lc_code: &str) -> bool {
         // Open will return an error if it does not exist, so err = good.
         match File::open(DL_DIR.to_string() + lc_code + "/" + &file_name) {
             Ok(_) => continue,
-            Err(_) => println!("Choosing to download '{}'", file_name),
+            Err(_) => {
+                print!("\r({:02}) Choosing to download '{}'", downloads+1, file_name);
+                std::io::stdout().flush().expect("Error flushing stdout");
+            },
         };
 
         // Get the file from the server
         let remote_file = match ftp_stream.simple_retr(&file_name) {
             Ok(file) => file,
             Err(e) => {
-                println!("Failed to get file: {}", e);
+                println!("\nFailed to get file: {}", e);
                 return false;
             }
         };
@@ -98,13 +101,16 @@ pub fn save_files(lc_code: &str) -> bool {
         file.write_all(remote_file.into_inner().as_slice())
             .expect("Error writing file to disk");
 
-        downloads = true;
+        downloads += 1;
     }
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
+    if downloads > 0{
+        println!("");
+    }
 
-    downloads
+    downloads > 0
 }
 
 pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
@@ -272,13 +278,11 @@ fn mark_files_as_new(location_code: &str){
        })
        .collect();
 
-   println!("Existing Files for location code '{}'", location_code);
     let mut file_names = file_names.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
 
     file_names.sort();
 
     for file_name in file_names {
-        println!("{}", file_name);
         let new_name = "x".to_string() + file_name;
         fs::rename(&(dir.to_string() + file_name),
                    &(dir.to_string() + &new_name))
