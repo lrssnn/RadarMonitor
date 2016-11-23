@@ -140,8 +140,18 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         }
                         Key::PageUp => frame_time = change_speed(frame_time, true),
                         Key::PageDown => frame_time = change_speed(frame_time, false),
-                        Key::LBracket | Key::End => zoom = change_zoom(zoom, false),
-                        Key::RBracket | Key::Home => zoom = change_zoom(zoom, true),
+                        Key::LBracket | Key::End => {
+                            zoom = change_zoom(zoom, false);
+                            if textures[zoom].len() <= index {
+                                index = 0;
+                            };
+                        },
+                        Key::RBracket | Key::Home => {
+                            zoom = change_zoom(zoom, true);
+                            if textures[zoom].len() <= index {
+                                index = 0;
+                            };
+                        },
                         _ => (),
                     }
                 }
