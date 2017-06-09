@@ -14,6 +14,8 @@ use time;
 
 use std::str;
 use std::fs;
+use std::thread;
+use std::time::Duration;
 use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool};
@@ -157,6 +159,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                 }
                 _ => (),
             }
+        }
+
+        // Reduce Processor usage significantly
+        // Looks ugly but doesn't seem to impact visual framerate
+        while(time::now() - last_frame).num_milliseconds() <= frame_time as i64{
+            thread::sleep(Duration::from_millis(20));
         }
 
         if (time::now() - last_frame).num_milliseconds() >= frame_time as i64 {
