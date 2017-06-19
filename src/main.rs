@@ -7,6 +7,8 @@ use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool};
 
+use std::env;
+
 mod image_viewer;
 
 mod downloader;
@@ -28,6 +30,24 @@ const SPEED_FAST: usize = 60;
 
 // Main function.
 fn main() {
+   
+    let mut clean = false;
+
+    println!("Radar Monitor:");
+    // Check the program args
+    for arg in env::args().skip(1) {
+        if arg == "--clean"  || arg == "-c" {
+            clean = true;
+        } else {
+            println!("Unknown argument: {}", arg);
+            return;
+        }
+    }
+
+    if clean {
+        println!("Cleaning images directory");
+        downloader::clean();
+    }
 
     init();
 

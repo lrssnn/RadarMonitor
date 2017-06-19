@@ -310,3 +310,24 @@ pub fn remove_old_files() {
         fs::remove_file(DL_DIR.to_string() + name).expect("Error deleting file");
     }
 }
+
+pub fn clean() {
+    let file_error = "Error reading file system";
+    let dirs = fs::read_dir(DL_DIR).expect(file_error);
+
+    for dir in dirs {
+        let files = fs::read_dir(dir.expect(file_error).path()).expect(file_error);
+
+        let mut file_names: Vec<_> = files.map(|e| {
+            e.expect(file_error)
+                .path()
+        })
+        .collect();
+        file_names.sort();
+
+        for file in file_names{
+           fs::remove_file(file);
+        }
+    }
+
+}
