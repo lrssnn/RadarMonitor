@@ -311,9 +311,15 @@ pub fn remove_old_files() {
     }
 }
 
+// Removes all files from the image directories
 pub fn clean() {
     let file_error = "Error reading file system";
-    let dirs = fs::read_dir(DL_DIR).expect(file_error);
+
+    let mut dirs;
+    match fs::read_dir(DL_DIR) {
+        Ok(d)  => { dirs = d }
+        Err(_) => { return }
+    };
 
     for dir in dirs {
         let files = fs::read_dir(dir.expect(file_error).path()).expect(file_error);
