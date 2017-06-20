@@ -2,6 +2,7 @@ extern crate ftp;
 
 use std;
 use std::str;
+use std::str::FromStr;
 use std::io::prelude::*;
 use std::fs;
 use std::fs::File;
@@ -16,6 +17,16 @@ use super::CODE_MID;
 use super::CODE_LOW;
 use super::CODE_HIGH;
 use super::IMAGES_KEPT;
+
+//Simple timecode struct used to determine file contiguousness
+#[derive(Debug)]
+struct Timecode {
+    year: usize,
+    month: usize,
+    day: usize,
+    hour: usize,
+    min: usize
+}
 
 /// Download new files for any of the three radars of the program. 
 /// Returns whether or not any files were downloaded
@@ -311,19 +322,24 @@ pub fn remove_old_files() {
     }
 }
 
-// Removes all files from the image directories
+// Removes non-contiguous files from each image directory
+// i.e. leaves only the most recent streak of contiguous images based on the 
+// assumption that each image from the radar comes six minutes after the previous one
 pub fn clean() {
     let file_error = "Error reading file system";
 
-    let mut dirs;
+    let dirs;
+    // If DL_DIR doesn't exist, there is nothing to clean
     match fs::read_dir(DL_DIR) {
         Ok(d)  => { dirs = d }
         Err(_) => { return }
     };
 
+    // Iterate through the subdirectories (zoom levels)
     for dir in dirs {
         let files = fs::read_dir(dir.expect(file_error).path()).expect(file_error);
 
+        // Get the path for each file
         let mut file_names: Vec<_> = files.map(|e| {
             e.expect(file_error)
                 .path()
@@ -331,9 +347,74 @@ pub fn clean() {
         .collect();
         file_names.sort();
 
-        for file in file_names{
-           fs::remove_file(file);
+        let mut del = false;
+        // Iterate through the files in reverse order (newest to oldest)
+        // If del is true we have already found a break in continuity and are just deleting
+        for (i, prev) in file_names.iter().enumerate().rev(){
+            if i+1 != file_names.len() {
+                // Look ahead 1
+                let file = &file_names[i+1];
+                if del {
+                    println!("deleting {:?}", prev);
+                    fs::remove_file(prev).expect(file_error);
+                } else if !consecutive_files(&prev, &file) {
+                    del = true;
+                    println!("deleting {:?}", prev);
+                    fs::remove_file(prev).expect(file_error);
+                }
+            }
         }
     }
+}
 
+// Converts a file path to a Timecode object
+// Assumes that the file given is a BOM radar image
+fn timecode_from_path(name: &std::path::Path) -> Timecode{ 
+    // Get the file name
+    let name = name.file_name().expect("Error reading file name")
+        .to_str().expect("String conversion error");
+
+    // Split at each dot and take the third (just the timecode)
+    let string = name.split('.').nth(2).expect("Unexpected file format");
+
+    // Split the timecode into the respective parts
+    let (year, string) = string.split_at(4);
+    let (month, string) = string.split_at(2);
+    let (day, string) = string.split_at(2);
+    let (hour, string) = string.split_at(2);
+    let (min, _) = string.split_at(2);
+
+    // Convert into numbers and return
+    Timecode{
+        year:  usize::from_str(year).expect("Unexpected file format"),
+        month: usize::from_str(month).expect("Unexpected file format"),
+        day:   usize::from_str(day).expect("Unexpected file format"),
+        hour:  usize::from_str(hour).expect("Unexpected file format"),
+        min:   usize::from_str(min).expect("Unexpected file format"),
+    }
+}
+
+// Returns true if the two files given are consecutive, in that the timecodes contained
+// in the file names are 6 minutes apart
+fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
+    // Convert filenames to timecodes
+    let prev = timecode_from_path(prev);
+    let next = timecode_from_path(next);
+
+    // Chain through the different levels of time timecode
+    // Not entirely sure that every level works but it at least works across 
+    // Hour boundaries so for the most part is ok
+    if prev.min + 6 == next.min {
+        return true;
+    } else if next.min <= 6 && prev.hour + 1 == next.hour {
+        return true;
+    } else if next.hour == 0 && prev.day + 1 == next.day {
+        return true;
+    } else if next.day == 0 && prev.month + 1 == next.month {
+        return true;
+    } else if next.month == 0 && prev.year + 1 == next.year {
+        return true;
+    } else {
+        return false;
+    }
 }

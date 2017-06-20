@@ -44,12 +44,13 @@ fn main() {
         }
     }
 
+
+    init();
+
     if clean {
         println!("Cleaning images directory");
         downloader::clean();
     }
-
-    init();
 
     // Create a boolean variable which we will send to the child thread when it is time to
     // regenerate the texture list and one which tells the main thread when the child
