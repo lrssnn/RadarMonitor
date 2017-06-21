@@ -30,9 +30,10 @@ struct Timecode {
 /// Download new files for any of the three radars of the program. 
 /// Returns whether or not any files were downloaded
 pub fn save_all_files() -> bool {
-    let a = save_files(CODE_LOW);
-    let b = save_files(CODE_MID);
-    let c = save_files(CODE_HIGH);
+    let a = save_files(CODE_LOW).is_ok();
+    let b = save_files(CODE_MID).is_ok();
+    let c = save_files(CODE_HIGH).is_ok();
+
     a || b || c
 }
 
@@ -40,55 +41,22 @@ pub fn save_all_files() -> bool {
 /// Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
 /// new.
 /// Returns whether or not any files were downloaded.
-pub fn save_files(lc_code: &str) -> bool {
+pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
 
     let mut downloads = 0;
 
-    // Server errors are unavoidable sometimes, so throughout the procedure, most errors result in
-    // an error message and a return rather than a panic, allowing the program to recover and
-    // retry as appropriate.
-
-    // Connect to the server
-    let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21") {
-        Ok(s) => s,
-        Err(e) => {
-            println!("Failed to connect to server: {}", e);
-            return false;
-        }
-    };
-
-    // Login anonymously
-    match ftp_stream.login("anonymous", "guest") {
-        Ok(_) => (),
-        Err(e) => {
-            println!("Failed to log in: {}", e);
-            return false;
-        }
-    };
-
-    // Change to the required directory
-    match ftp_stream.cwd("anon/gen/radar") {
-        Ok(_) => (),
-        Err(e) => {
-            println!("Failed to navigate to directory: {}", e);
-            return false;
-        }
-    };
+    // Connect to the server, login, change directory
+    let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
+    ftp_stream.login("anonymous", "guest")?;
+    ftp_stream.cwd("anon/gen/radar")?;
 
     // Find out which files are currently on the server
-    let mut filenames = match ftp_stream.nlst(Option::None) {
-        Ok(v) => v,
-        Err(e) => {
-            println!("Failed to get file list: {}", e);
-            return false;
-        }
-    };
+    let mut filenames = ftp_stream.nlst(Option::None)?;
 
     // Retain only the correct files (right prefix and right filetype)
     filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
 
     for file_name in filenames {
-
         // Prefix filename to designate it as a new file
         let file_name_x = "x".to_string() + &file_name;
 
@@ -106,14 +74,7 @@ pub fn save_files(lc_code: &str) -> bool {
         std::io::stdout().flush().expect("Error flushing stdout");
 
         // Get the file from the server
-        let remote_file = match ftp_stream.simple_retr(&file_name) {
-            Ok(file) => file,
-            Err(e) => {
-                println!("\nFailed to get file: {}", e);
-                return downloads > 0;
-            }
-        };
-
+        let remote_file = ftp_stream.simple_retr(&file_name)?;
 
         // Create a new file locally
         let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name_x)
@@ -132,7 +93,7 @@ pub fn save_files(lc_code: &str) -> bool {
         println!("");
     }
 
-    downloads > 0
+    Ok(())
 }
 
 /// Wait for 'mins' minutes while printing a report of how long remains.
@@ -167,17 +128,18 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
     false
 }
 
-/// Run first time initialisation tasks such as creating directories and priming with images
+// Run first time initialisation tasks such as creating directories and priming with images
+// Will panic if initialisation fails
 pub fn init() {
-    // Attempt to create the download directory, not caring if it succeeds or if it fails (the
-    // directory already exists)
+    // Attempt to create the download directory, not caring if it succeeds or if it fails 
+    // (the directory already exists)
     match fs::create_dir(DL_DIR) {
         Ok(_) | Err(_) => (),
     };
 
-    init_background(CODE_LOW);
-    init_background(CODE_MID);
-    init_background(CODE_HIGH);
+    init_background(CODE_LOW).expect("Initialisation Failure");
+    init_background(CODE_MID).expect("Initialisation Failure");
+    init_background(CODE_HIGH).expect("Initialisation Failure");
 
     // Any pre-existing files will not be prefixed, and will not be re-downloaded by
     // save_all_files(), once that has completed we re-prefix the pre-existing files to be made
@@ -189,10 +151,13 @@ pub fn init() {
     mark_files_as_new(CODE_HIGH);
 }
 
-/// Save the radar background for location code 'lc_code' and create the subdirectory for that
-/// radar's images
-pub fn init_background(lc_code: &str) {
+// Save the radar background for location code 'lc_code' and create the subdirectory for 
+// that radar's images
+// Propogates any FTP errors upstream, panics on file system errors
+pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
 
+    // Do nothing on an error. Generally an error here means that the directory 
+    // already exists which is what we want
     match fs::create_dir(DL_DIR.to_string() + lc_code + "/") {
         Ok(_) | Err(_) => (),
     };
@@ -200,49 +165,14 @@ pub fn init_background(lc_code: &str) {
     let background_file_name = &(lc_code.to_string() + ".background.png");
     let location_file_name = &(lc_code.to_string() + ".locations.png");
 
-    // Connect to the server
-    let mut ftp_stream = match FtpStream::connect("ftp2.bom.gov.au:21") {
-        Ok(s) => s,
-        Err(e) => {
-            println!("Failed to connect to server: {}", e);
-            return;
-        }
-    };
-
-    // Login anonymously
-    match ftp_stream.login("anonymous", "guest") {
-        Ok(_) => (),
-        Err(e) => {
-            println!("Failed to log in: {}", e);
-            return;
-        }
-    };
-
-    // Change to the required directory
-    match ftp_stream.cwd("anon/gen/radar_transparencies") {
-        Ok(_) => (),
-        Err(e) => {
-            println!("Failed to navigate to directory: {}", e);
-            return;
-        }
-    };
+    // Connect to the server, login, navigate to directory
+    let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
+    ftp_stream.login("anonymous", "guest")?;
+    ftp_stream.cwd("anon/gen/radar_transparencies")?;
 
     // Get the files from the server
-    let background_file = match ftp_stream.simple_retr(background_file_name) {
-        Ok(file) => file,
-        Err(e) => {
-            println!("Failed to get file: {}", e);
-            return;
-        }
-    };
-
-    let location_file = match ftp_stream.simple_retr(location_file_name) {
-        Ok(file) => file,
-        Err(e) => {
-            println!("Failed to get file: {}", e);
-            return;
-        }
-    };
+    let background_file = ftp_stream.simple_retr(background_file_name)?;
+    let location_file = ftp_stream.simple_retr(location_file_name)?;
 
     // Create a new file locally (overwriting if already exists)
     let mut bg_file = File::create(background_file_name).expect("Error creating file on disk");
@@ -255,6 +185,8 @@ pub fn init_background(lc_code: &str) {
         .expect("Error writing file to disk");
     // Disconnect from the server
     let _ = ftp_stream.quit();
+
+    Ok(())
 }
 
 /// For all files in the folder DL_DIR/location_code/ which do not have an 'x' prefix, add that
