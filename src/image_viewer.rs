@@ -41,6 +41,7 @@ implement_vertex!(Vertex, position, colour, texture_pos);
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     let mut index = 0;
+    let mut force_redraw = false;
     let mut last_frame = Instant::now();
     let mut frame_time: usize = SPEED_MID;
 
@@ -149,12 +150,14 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                             if textures[zoom].len() <= index {
                                 index = 0;
                             };
+                            force_redraw = true;
                         },
                         Key::RBracket | Key::Home => {
                             zoom = change_zoom(zoom, true);
                             if textures[zoom].len() <= index {
                                 index = 0;
                             };
+                            force_redraw = true;
                         },
                         _ => (),
                     }
@@ -163,31 +166,32 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
             }
         }
 
-        // Reduce Processor usage significantly
-        // Looks ugly but doesn't seem to impact visual framerate
+        // Wait until the frame time has elapsed
+        // 20 millisecond increments are ugly but reduce processor usage a lot and
+        // don't seem to effect visual framerate
         let frame_time_nanos = (frame_time * 1000000) as u32;
-        while(Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
-            //thread::sleep(Duration::from_millis(2));
+        while !force_redraw && 
+              (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+            thread::sleep(Duration::from_millis(20));
         }
 
-        if (Instant::now() - last_frame).subsec_nanos() >= frame_time_nanos {
-            index = {
-                if index + 1 < textures[zoom].len() {
-                    index + 1
-                } else {
-                    0
-                }
-            };
+        index = {
+            if index + 1 < textures[zoom].len() {
+                index + 1
+            } else {
+                0
+            }
+        };
 
-            last_frame = Instant::now();
+        last_frame = Instant::now();
+        force_redraw = false;
 
-            // Check if we should update if we are looping over to the start again
-            if index == 0 {
-                let update = update.swap(false, Ordering::Relaxed);
+        // Check if we should update if we are looping over to the start again
+        if index == 0 {
+            let update = update.swap(false, Ordering::Relaxed);
 
-                if update {
-                    add_all_new_textures(&display, &mut textures);
-                }
+            if update {
+                add_all_new_textures(&display, &mut textures);
             }
         }
     }
