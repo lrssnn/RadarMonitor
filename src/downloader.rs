@@ -27,8 +27,8 @@ struct Timecode {
     min: usize
 }
 
-/// Download new files for any of the three radars of the program. 
-/// Returns whether or not any files were downloaded
+// Download new files for any of the three radars of the program. 
+// Returns whether or not any files were downloaded
 pub fn save_all_files() -> bool {
     let a = save_files(CODE_LOW).is_ok();
     let b = save_files(CODE_MID).is_ok();
@@ -37,10 +37,10 @@ pub fn save_all_files() -> bool {
     a || b || c
 }
 
-/// Connect to the BOM ftp server and download any new files for the product code 'lc_code'
-/// Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
-/// new.
-/// Returns whether or not any files were downloaded.
+// Connect to the BOM ftp server and download any new files for the product code 'lc_code'
+// Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
+// new.
+// Returns whether or not any files were downloaded.
 pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
 
     let mut downloads = 0;
@@ -63,11 +63,9 @@ pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
         // Check if the file already exists locally.
         // Open will return an error if it does not exist, so err = good.
         // If open succeeds, the file exists and we move to the next file
-        match File::open(DL_DIR.to_string() + lc_code + "/" + &file_name) {
-            Ok(_) => continue,
-            Err(_) => {
-            }
-        };
+        if File::open(DL_DIR.to_string() + lc_code + "/" + &file_name).is_ok() {
+            continue;
+        }
         
         // Print a message (one line only regardless of number of files)
         print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
@@ -96,9 +94,9 @@ pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
     Ok(())
 }
 
-/// Wait for 'mins' minutes while printing a report of how long remains.
-/// Regularly monitors 'terminate' and returns early if it goes true.
-/// Returns true if terminated early, otherwise false.
+// Wait for 'mins' minutes while printing a report of how long remains.
+// Regularly monitors 'terminate' and returns early if it goes true.
+// Returns true if terminated early, otherwise false.
 pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
     let mut secs = mins * 60;
 
@@ -189,8 +187,8 @@ pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
     Ok(())
 }
 
-/// For all files in the folder DL_DIR/location_code/ which do not have an 'x' prefix, add that
-/// prefix to their filename.
+// For all files in the folder DL_DIR/location_code/ which do not have an 'x' prefix, add that
+// prefix to their filename.
 fn mark_files_as_new(location_code: &str) {
     // Read the directory and convert to filenames
     let dir = DL_DIR.to_string() + location_code + "/";
@@ -254,7 +252,7 @@ pub fn clean() {
                     del += 1;
                     print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
-                } else if !consecutive_files(&prev, &file) {
+                } else if !consecutive_files(prev, file) {
                     del += 1;
                     print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
@@ -304,17 +302,12 @@ fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     // Chain through the different levels of time timecode
     // Not entirely sure that every level works but it at least works across 
     // Hour boundaries so for the most part is ok
-    if prev.min + 6 == next.min {
-        return true;
-    } else if next.min <= 6 && prev.hour + 1 == next.hour {
-        return true;
-    } else if next.hour == 0 && prev.day + 1 == next.day {
-        return true;
-    } else if next.day == 0 && prev.month + 1 == next.month {
-        return true;
-    } else if next.month == 0 && prev.year + 1 == next.year {
-        return true;
+    if prev.min + 6 == next.min ||
+    (next.min <= 6 && prev.hour + 1 == next.hour) ||
+    (next.hour == 0 && prev.day + 1 == next.day) ||
+    (next.day == 0 && prev.month + 1 == next.month){
+        true
     } else {
-        return false;
+        next.month == 0 && prev.year + 1 == next.year
     }
 }
