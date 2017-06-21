@@ -27,7 +27,6 @@ use super::CODE_LOW;
 use super::CODE_MID;
 use super::CODE_HIGH;
 use super::DL_DIR;
-use super::IMAGES_KEPT;
 
 extern crate image;
 
@@ -227,11 +226,6 @@ fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Te
         .collect();
 
     file_names.sort();
-
-    if IMAGES_KEPT > 0 {
-        let len = file_names.len();
-        file_names = file_names.split_off(len - IMAGES_KEPT);
-    }
 
     file_names.iter()
         .map(|e| {

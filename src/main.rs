@@ -12,11 +12,9 @@ use std::env;
 mod image_viewer;
 
 mod downloader;
-use downloader::{save_all_files, init, wait_mins, remove_old_files};
+use downloader::{save_all_files, init, wait_mins};
 
 // Configuration constants
-const IMAGES_KEPT: usize = 0; // Number of images to keep in the rotating set
-
 const DL_DIR: &'static str = "img/"; // Folder to keep images in. Relative to start dir or absolute
 
 const CODE_LOW: &'static str = "IDR042";
@@ -83,7 +81,5 @@ fn main() {
 
         // Tell the other thread to update the image display
         update.store(true, Ordering::Relaxed);
-
-        remove_old_files();
     }
 }

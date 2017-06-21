@@ -16,7 +16,6 @@ use super::DL_DIR;
 use super::CODE_MID;
 use super::CODE_LOW;
 use super::CODE_HIGH;
-use super::IMAGES_KEPT;
 
 //Simple timecode struct used to determine file contiguousness
 #[derive(Debug)]
@@ -284,41 +283,6 @@ fn mark_files_as_new(location_code: &str) {
         fs::rename(&(dir.to_string() + file_name),
                    &(dir.to_string() + &new_name))
             .expect("Error renaming file");
-    }
-}
-
-/// Remove files from the download folders from oldest to newest until there are IMAGES_KEPT
-/// remaining. If IMAGES_KEPT = 0, there is no limit and this does nothing.
-pub fn remove_old_files() {
-    // If the number to keep is 0, means keep everything
-    if IMAGES_KEPT == 0 {
-        return;
-    }
-
-    // Get a list of every file in the image folder
-    let files = fs::read_dir(DL_DIR).expect("Error reading file system");
-
-    let mut file_names: Vec<_> = files.map(|e| {
-            e.expect("Error reading file system")
-                .file_name()
-                .into_string()
-                .expect("Error extracting file name")
-        })
-        .collect();
-    file_names.sort();
-
-    println!("Images in img/: {}", file_names.len());
-
-    let mut file_names = file_names.iter();
-
-    while file_names.len() > IMAGES_KEPT {
-        // Delete a file
-        let name = file_names.next().expect("Error finding first filename");
-        println!("List length: {}, target: {} Removing: {}",
-                 file_names.len(),
-                 IMAGES_KEPT,
-                 name);
-        fs::remove_file(DL_DIR.to_string() + name).expect("Error deleting file");
     }
 }
 
