@@ -5,6 +5,5 @@ authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 
 [dependencies]
 ftp = "*"
-time = "*"
 glium = "*"
 image = "*"

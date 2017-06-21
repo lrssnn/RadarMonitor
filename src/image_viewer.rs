@@ -10,12 +10,10 @@ use glium::glutin::Event::KeyboardInput;
 use glium::glutin::VirtualKeyCode as Key;
 use glium::glutin::ElementState;
 
-use time;
-
 use std::str;
 use std::fs;
 use std::thread;
-use std::time::Duration;
+use std::time::{Instant, Duration};
 use std::iter::Iterator;
 use std::sync::Arc;
 use std::sync::atomic::{Ordering, AtomicBool};
@@ -43,7 +41,7 @@ implement_vertex!(Vertex, position, colour, texture_pos);
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     let mut index = 0;
-    let mut last_frame = time::now();
+    let mut last_frame = Instant::now();
     let mut frame_time: usize = SPEED_MID;
 
     // Open the window
@@ -53,17 +51,22 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         .build_glium()
         .expect("Unable to create a window");
 
-    let bg_textures = [texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
-                       texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
-                       texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png"))];
-    let lc_textures = [texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
-                       texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
-                       texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png"))];
+    let bg_textures = [texture_from_image(&display, 
+                                          &(CODE_LOW.to_string() + ".background.png")),
+                       texture_from_image(&display, 
+                                          &(CODE_MID.to_string() + ".background.png")),
+                       texture_from_image(&display, 
+                                          &(CODE_HIGH.to_string() + ".background.png"))];
+    let lc_textures = [texture_from_image(&display, 
+                                          &(CODE_LOW.to_string() + ".locations.png")),
+                       texture_from_image(&display, 
+                                          &(CODE_MID.to_string() + ".locations.png")),
+                       texture_from_image(&display, 
+                                          &(CODE_HIGH.to_string() + ".locations.png"))];
 
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
         const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
-
         glium::Program::from_source(&display, VERT_SHADER, FRAG_SHADER, None)
             .expect("Error creating shader program")
     };
@@ -139,7 +142,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                             exit(finish);
                             return;
                         }
-                        Key::PageUp => frame_time = change_speed(frame_time, true),
+                        Key::PageUp   => frame_time = change_speed(frame_time, true),
                         Key::PageDown => frame_time = change_speed(frame_time, false),
                         Key::LBracket | Key::End => {
                             zoom = change_zoom(zoom, false);
@@ -162,11 +165,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
         // Reduce Processor usage significantly
         // Looks ugly but doesn't seem to impact visual framerate
-        while(time::now() - last_frame).num_milliseconds() <= frame_time as i64{
-            thread::sleep(Duration::from_millis(20));
+        let frame_time_nanos = (frame_time * 1000000) as u32;
+        while(Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+            //thread::sleep(Duration::from_millis(2));
         }
 
-        if (time::now() - last_frame).num_milliseconds() >= frame_time as i64 {
+        if (Instant::now() - last_frame).subsec_nanos() >= frame_time_nanos {
             index = {
                 if index + 1 < textures[zoom].len() {
                     index + 1
@@ -175,7 +179,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                 }
             };
 
-            last_frame = time::now();
+            last_frame = Instant::now();
 
             // Check if we should update if we are looping over to the start again
             if index == 0 {
@@ -295,3 +299,4 @@ fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
     Texture2d::new(display, image).expect("Error creating texture from image")
 
 }
+

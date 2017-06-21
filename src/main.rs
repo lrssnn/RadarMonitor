@@ -1,7 +1,6 @@
 #[macro_use]
 extern crate glium;
 extern crate ftp;
-extern crate time;
 
 use std::thread;
 use std::sync::Arc;
