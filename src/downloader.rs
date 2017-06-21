@@ -311,22 +311,26 @@ pub fn clean() {
         .collect();
         file_names.sort();
 
-        let mut del = false;
+        let mut del = 0;
         // Iterate through the files in reverse order (newest to oldest)
         // If del is true we have already found a break in continuity and are just deleting
         for (i, prev) in file_names.iter().enumerate().rev(){
             if i+1 != file_names.len() {
                 // Look ahead 1
                 let file = &file_names[i+1];
-                if del {
-                    println!("deleting {:?}", prev);
+                if del > 0 {
+                    del += 1;
+                    print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
                 } else if !consecutive_files(&prev, &file) {
-                    del = true;
-                    println!("deleting {:?}", prev);
+                    del += 1;
+                    print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
                 }
             }
+        }
+        if del > 0 {
+            println!("");
         }
     }
 }
