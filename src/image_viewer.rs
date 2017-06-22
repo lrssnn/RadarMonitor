@@ -1,14 +1,29 @@
-use super::glium;
-use glium::DisplayBuild;
-use glium::{Surface, VertexBuffer, IndexBuffer};
-use glium::index::PrimitiveType;
-use glium::texture::{Texture2d, RawImage2d};
+use super::vulkano;
+use super::vulkano_shader_derive;
+extern crate winit;
+extern crate vulkano_win;
 
-use glium::draw_parameters::{DrawParameters, Blend};
+use self::vulkano_win::VkSurfaceBuild;
 
-use glium::glutin::Event::KeyboardInput;
-use glium::glutin::VirtualKeyCode as Key;
-use glium::glutin::ElementState;
+use vulkano::buffer::BufferUsage;
+use vulkano::buffer::CpuAccessibleBuffer;
+use vulkano::command_buffer::AutoCommandBufferBuilder;
+use vulkano::command_buffer::CommandBufferBuilder;
+use vulkano::command_buffer::DynamicState;
+use vulkano::device::Device;
+use vulkano::framebuffer::Framebuffer;
+use vulkano::framebuffer::Subpass;
+use vulkano::instance::Instance;
+use vulkano::pipeline::GraphicsPipeline;
+use vulkano::pipeline::viewport::Viewport;
+use vulkano::swapchain;
+use vulkano::swapchain::PresentMode;
+use vulkano::swapchain::SurfaceTransform;
+use vulkano::swapchain::Swapchain;
+use vulkano::sync::now;
+use vulkano::sync::GpuFuture;
+
+use std::iter;
 
 use std::str;
 use std::fs;
@@ -28,6 +43,7 @@ use super::DL_DIR;
 
 extern crate image;
 
+/*
 #[derive(Copy, Clone)]
 struct Vertex {
     pub position: [f32; 2],
@@ -36,6 +52,7 @@ struct Vertex {
 }
 
 implement_vertex!(Vertex, position, colour, texture_pos);
+*/
 
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
@@ -45,12 +62,175 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     let mut last_frame = Instant::now();
     let mut frame_time: usize = SPEED_MID;
 
+    let instance = {
+        let extensions = vulkano_win::required_extensions();
+        Instance::new(None, &extensions, None).expect("Failed to create Vulkan instance")
+    };
+
+    let physical = vulkano::instance::PhysicalDevice::enumerate(&instance)
+        .next().expect("No device available");
+
+    println!("Using device: {} (type: {:?})", physical.name(), physical.ty());
+
     // Open the window
-    let display = glium::glutin::WindowBuilder::new()
-        .with_dimensions(512, 512)
-        .with_title("Radar Monitor")
-        .build_glium()
-        .expect("Unable to create a window");
+    let events_loop = winit::EventsLoop::new();
+    let window = winit::WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+
+    let queue = physical.queue_families().find(|&q| {
+        q.supports_graphics() && window.surface().is_supported(q).unwrap_or(false)
+    }).expect("Couldn't find a graphical queue family");
+
+    //Initialise device
+    let (device, mut queues) = {
+        let device_ext = vulkano::device::DeviceExtensions {
+            khr_swapchain: true,
+            .. vulkano::device::DeviceExtensions::none()
+        };
+
+        Device::new(&physical, physical.supported_features(), &device_ext,
+                    [(queue, 0.5)].iter().cloned()).expect("Failed to create device")
+    };
+
+    let queue = queues.next().unwrap();
+
+    let (swapchain, images) = {
+        let caps = window.surface().capabilities(physical)
+            .expect("Failed to get surface capabilities");
+
+        let dimensions = caps.current_extent.unwrap_or([1280, 1024]);
+
+        let alpha = caps.supported_composite_alpha.iter().next().unwrap();
+        let format = caps.supported_formats[0].0;
+
+        Swapchain::new(device.clone(), window.surface().clone(), caps.min_image_count, format,
+                       dimensions, 1, caps.supported_usage_flags, &queue,
+                       SurfaceTransform::Identity, alpha, PresentMode::Fifo, true, None)
+                       .expect("Failed to create swapchain")
+    };
+
+    let vertex_buffer = {
+        #[derive(Debug, Clone)]
+        struct Vertex { position: [f32; 2] }
+        impl_vertex!(Vertex, position);
+
+        CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), [
+                                       Vertex { position: [-0.5, 0.5] }, 
+                                       Vertex { position: [-0.5, -0.5] }, 
+                                       Vertex { position: [0.5, 0.5] }, 
+                                       Vertex { position: [0.5, -0.5] } 
+        ].iter().cloned()).expect("Failed to create buffer")
+    };
+
+    //Create shaders
+    mod vs {
+        #[derive(VulkanoShader)]
+        #[ty = "vertex"]
+        #[src = "
+#version 450
+
+layout(location = 0) in vec2 position;
+
+void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+}
+"]
+        struct Dummy;
+    }
+
+    mod fs {
+        #[derive(VulkanoShader)]
+        #[ty = "fragment"]
+        #[src = "
+#version 450
+
+layout(location = 0) out vec4 f_colour;
+
+void main() {
+    f_colour = vec4(1.0, 0.0, 0.5, 1.0);
+}
+"]
+        struct Dummy;
+    }
+
+    let vs = vs::Shader::load(&device).expect("Failed to create shader module");
+    let fs = fs::Shader::load(&device).expect("Failed to create shader module");
+
+    let render_pass = Arc::new(single_pass_renderpass!(device.clone(),
+        attachments: {
+            color: {
+                load: Clear,
+                store: Store,
+                format: swapchain.format(),
+                samples: 1,
+            }
+        },
+        pass: {
+            color: [color],
+            depth_stencil: {}
+        }
+        ).unwrap());
+
+    let pipeline = Arc::new(GraphicsPipeline::start()
+                            .vertex_input_single_buffer()
+                            .vertex_shader(vs.main_entry_point(), ())
+                            .triangle_list()
+                            .viewports(iter::once(Viewport {
+                                origin: [0.0, 0.0],
+                                depth_range: 0.0 .. 1.0,
+                                dimensions: [images[0].dimensions()[0] as f32, 
+                                             images[0].dimensions()[1] as f32],
+                            }))
+
+                            .fragment_shader(fs.main_entry_point(), ())
+                            .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
+                            .build(device.clone())
+                            .unwrap());
+
+    let framebuffers = images.iter().map(|image| {
+        Arc::new(Framebuffer::start(render_pass.clone())
+                 .add(image.clone()).unwrap()
+                 .build().unwrap())
+    }).collect::<Vec<_>>();
+
+    let mut previous_frame_end = Box::new(now(device.clone())) as Box<GpuFuture>;
+
+    loop {
+
+        previous_frame_end.cleanup_finished();
+
+        let (image_num, acquire_future) = swapchain::acquire_next_image(swapchain.clone(),
+                                                                       Duration::new(1, 0)).unwrap();
+
+        // Build the render command
+        let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
+            .begin_render_pass(framebuffers[image_num].clone(), false,
+                               vec![[0.0, 0.0, 1.0, 1.0].into()])
+            .unwrap()
+            .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), (), ())
+            .unwrap()
+            .end_render_pass()
+            .unwrap()
+            .build().unwrap();
+
+        let future = previous_frame_end.join(acquire_future)
+            .then_execute(queue.clone(), command_buffer).unwrap()
+            .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
+            .then_signal_fence_and_flush().unwrap();
+
+        previous_frame_end = Box::new(future) as Box<_>;
+
+        // Handle events
+        let mut done = false;
+        events_loop.poll_events(|ev| {
+            match ev {
+                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => done = true,
+                _ => ()
+            }
+        });
+        if done {return;}
+    }
+}
+ /*
 
     let bg_textures = [texture_from_image(&display, 
                                           &(CODE_LOW.to_string() + ".background.png")),
@@ -303,4 +483,4 @@ fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
     Texture2d::new(display, image).expect("Error creating texture from image")
 
 }
-
+*/

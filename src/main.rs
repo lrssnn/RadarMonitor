@@ -1,6 +1,9 @@
-#[macro_use]
-extern crate glium;
 extern crate ftp;
+
+#[macro_use]
+extern crate vulkano;
+#[macro_use]
+extern crate vulkano_shader_derive;
 
 use std::thread;
 use std::sync::Arc;
@@ -9,7 +12,6 @@ use std::sync::atomic::{Ordering, AtomicBool};
 use std::env;
 
 mod image_viewer;
-
 mod downloader;
 use downloader::{save_all_files, init, wait_mins};
 

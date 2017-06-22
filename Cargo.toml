@@ -5,5 +5,8 @@ authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 
 [dependencies]
 ftp = "*"
-glium = "*"
 image = "*"
+vulkano = "*"
+vulkano-shader-derive = "*"
+vulkano-win = "*"
+winit = "*"
