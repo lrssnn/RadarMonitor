@@ -23,6 +23,10 @@ use vulkano::swapchain::Swapchain;
 use vulkano::sync::now;
 use vulkano::sync::GpuFuture;
 
+use self::winit::WindowEvent;
+use self::winit::Event::WindowEvent as Event;
+use self::winit::VirtualKeyCode as Key;
+
 use std::iter;
 
 use std::str;
@@ -114,18 +118,6 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         #[derive(Debug, Clone)]
         struct Vertex { position: [f32; 2], tex_pos: [f32; 2]}
         impl_vertex!(Vertex, position, tex_pos);
-
-        // A.......B
-        // |      /|
-        // |     / |
-        // |    /  |
-        // |   /   |
-        // |  /    |
-        // | /     |
-        // |/      |
-        // C.......D
-        //
-        // ABCCBD
 
         CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), [
                                        Vertex { position: [-1.0, -1.0], tex_pos: [0.0, 0.0]}, 
@@ -309,7 +301,8 @@ void main() {
         let mut done = false;
         events_loop.poll_events(|ev| {
             match ev {
-                winit::Event::WindowEvent { event: winit::WindowEvent::Closed, .. } => done = true,
+                Event { event: WindowEvent::Closed, .. }
+              | Event { event: WindowEvent::KeyboardInput(_, _, Some(Key::Escape),_), ..} => done = true,
                 _ => ()
             }
         });
