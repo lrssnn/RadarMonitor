@@ -74,7 +74,9 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     // Open the window
     let events_loop = winit::EventsLoop::new();
-    let window = winit::WindowBuilder::new().build_vk_surface(&events_loop, instance.clone()).unwrap();
+    let window = winit::WindowBuilder::new()
+        .with_dimensions(512, 512)
+        .build_vk_surface(&events_loop, instance.clone()).unwrap();
 
     let queue = physical.queue_families().find(|&q| {
         q.supports_graphics() && window.surface().is_supported(q).unwrap_or(false)
@@ -110,14 +112,26 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     let vertex_buffer = {
         #[derive(Debug, Clone)]
-        struct Vertex { position: [f32; 2] }
-        impl_vertex!(Vertex, position);
+        struct Vertex { position: [f32; 2], tex_pos: [f32; 2]}
+        impl_vertex!(Vertex, position, tex_pos);
+
+        // A.......B
+        // |      /|
+        // |     / |
+        // |    /  |
+        // |   /   |
+        // |  /    |
+        // | /     |
+        // |/      |
+        // C.......D
+        //
+        // ABCCBD
 
         CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), [
-                                       Vertex { position: [-0.5, -0.5] }, 
-                                       Vertex { position: [-0.5,  0.5] }, 
-                                       Vertex { position: [ 0.5, -0.5] }, 
-                                       Vertex { position: [ 0.5,  0.5] } 
+                                       Vertex { position: [-1.0, -1.0], tex_pos: [0.0, 0.0]}, 
+                                       Vertex { position: [-1.0,  1.0], tex_pos: [0.0, 1.0]}, 
+                                       Vertex { position: [ 1.0, -1.0], tex_pos: [1.0, 0.0]}, 
+                                       Vertex { position: [ 1.0,  1.0], tex_pos: [1.0, 1.0]} 
         ].iter().cloned()).expect("Failed to create buffer")
     };
 
@@ -129,11 +143,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 #version 450
 
 layout(location = 0) in vec2 position;
+layout(location = 1) in vec2 tex_pos;
 layout(location = 0) out vec2 tex_coords;
 
 void main() {
     gl_Position = vec4(position, 0.0, 1.0);
-    tex_coords = position + vec2(0.5);
+    tex_coords = tex_pos;
 }
 "]
         struct Dummy;
@@ -179,11 +194,28 @@ void main() {
         vulkano::image::Dimensions::Dim2d { width: 512, height: 512 },
         vulkano::format::R8G8B8A8Unorm, Some(queue.family())).unwrap();
 
-    let pixel_buffer = {
+    let pixel_buffer_a = {
         /*
         let image = image::load_from_memory_with_format(include_bytes!("image.png"), image::ImageFormat::PNG).unwrap().to_rgba();
         */
         let image = image::open("image.png").expect("Error opening image file").to_rgba();
+        let image_data = image.into_raw().clone();
+        let image_data_chunks = image_data.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]);
+
+
+
+
+        vulkano::buffer::cpu_access::CpuAccessibleBuffer::<[[u8; 4]]>
+            ::from_iter(device.clone(), vulkano::buffer::BufferUsage::all(),
+                        Some(queue.family()), image_data_chunks)
+            .expect("Failed to create buffer")
+    };
+
+    let pixel_buffer_b = {
+        /*
+        let image = image::load_from_memory_with_format(include_bytes!("image.png"), image::ImageFormat::PNG).unwrap().to_rgba();
+        */
+        let image = image::open("image2.png").expect("Error opening image file").to_rgba();
         let image_data = image.into_raw().clone();
         let image_data_chunks = image_data.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]);
 
@@ -241,8 +273,20 @@ void main() {
                                                                        Duration::new(1, 0)).unwrap();
 
         // Build the render command
-        let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
-            .copy_buffer_to_image(pixel_buffer.clone(), texture.clone())
+        let command_buffer_a = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
+            .copy_buffer_to_image(pixel_buffer_a.clone(), texture.clone())
+            .unwrap()
+            .begin_render_pass(framebuffers[image_num].clone(), false,
+                               vec![[0.0, 0.0, 1.0, 1.0].into()])
+            .unwrap()
+            .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), set.clone(), ())
+            .unwrap()
+            .end_render_pass()
+            .unwrap()
+            .build().unwrap();
+
+        let command_buffer_b = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
+            .copy_buffer_to_image(pixel_buffer_b.clone(), texture.clone())
             .unwrap()
             .begin_render_pass(framebuffers[image_num].clone(), false,
                                vec![[0.0, 0.0, 1.0, 1.0].into()])
@@ -254,7 +298,8 @@ void main() {
             .build().unwrap();
 
         let future = previous_frame_end.join(acquire_future)
-            .then_execute(queue.clone(), command_buffer).unwrap()
+            .then_execute(queue.clone(), command_buffer_a).unwrap()
+            .then_execute(queue.clone(), command_buffer_b).unwrap()
             .then_swapchain_present(queue.clone(), swapchain.clone(), image_num)
             .then_signal_fence_and_flush().unwrap();
 
@@ -268,7 +313,8 @@ void main() {
                 _ => ()
             }
         });
-        if done {return;}
+        if done {exit(finish);
+                 return;}
     }
 }
  /*
@@ -418,10 +464,11 @@ void main() {
     }
 }
 
-
+*/
 fn exit(terminate: &Arc<AtomicBool>) {
     terminate.store(true, Ordering::Relaxed);
 }
+/*
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
     if faster {
