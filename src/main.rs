@@ -44,7 +44,7 @@ fn main() {
     }
 
 
-    init();
+    //init();
 
     if clean {
         println!("Cleaning images directory");

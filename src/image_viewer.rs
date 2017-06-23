@@ -97,7 +97,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         let caps = window.surface().capabilities(physical)
             .expect("Failed to get surface capabilities");
 
-        let dimensions = caps.current_extent.unwrap_or([1280, 1024]);
+        let dimensions = caps.current_extent.unwrap_or([512, 512]);
 
         let alpha = caps.supported_composite_alpha.iter().next().unwrap();
         let format = caps.supported_formats[0].0;
@@ -114,10 +114,10 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         impl_vertex!(Vertex, position);
 
         CpuAccessibleBuffer::from_iter(device.clone(), BufferUsage::all(), Some(queue.family()), [
-                                       Vertex { position: [-0.5, 0.5] }, 
                                        Vertex { position: [-0.5, -0.5] }, 
-                                       Vertex { position: [0.5, 0.5] }, 
-                                       Vertex { position: [0.5, -0.5] } 
+                                       Vertex { position: [-0.5,  0.5] }, 
+                                       Vertex { position: [ 0.5, -0.5] }, 
+                                       Vertex { position: [ 0.5,  0.5] } 
         ].iter().cloned()).expect("Failed to create buffer")
     };
 
@@ -129,9 +129,11 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 #version 450
 
 layout(location = 0) in vec2 position;
+layout(location = 0) out vec2 tex_coords;
 
 void main() {
     gl_Position = vec4(position, 0.0, 1.0);
+    tex_coords = position + vec2(0.5);
 }
 "]
         struct Dummy;
@@ -143,10 +145,13 @@ void main() {
         #[src = "
 #version 450
 
+layout(location = 0) in vec2 tex_coords;
 layout(location = 0) out vec4 f_colour;
 
+layout(set = 0, binding = 0) uniform sampler2D tex;
+
 void main() {
-    f_colour = vec4(1.0, 0.0, 0.5, 1.0);
+    f_colour = texture(tex, tex_coords);
 }
 "]
         struct Dummy;
@@ -170,10 +175,40 @@ void main() {
         }
         ).unwrap());
 
+    let texture = vulkano::image::immutable::ImmutableImage::new(device.clone(),
+        vulkano::image::Dimensions::Dim2d { width: 512, height: 512 },
+        vulkano::format::R8G8B8A8Unorm, Some(queue.family())).unwrap();
+
+    let pixel_buffer = {
+        /*
+        let image = image::load_from_memory_with_format(include_bytes!("image.png"), image::ImageFormat::PNG).unwrap().to_rgba();
+        */
+        let image = image::open("image.png").expect("Error opening image file").to_rgba();
+        let image_data = image.into_raw().clone();
+        let image_data_chunks = image_data.chunks(4).map(|c| [c[0], c[1], c[2], c[3]]);
+
+
+
+
+        vulkano::buffer::cpu_access::CpuAccessibleBuffer::<[[u8; 4]]>
+            ::from_iter(device.clone(), vulkano::buffer::BufferUsage::all(),
+                        Some(queue.family()), image_data_chunks)
+            .expect("Failed to create buffer")
+    };
+
+   let sampler = vulkano::sampler::Sampler::new(device.clone(), vulkano::sampler::Filter::Linear,
+                                   vulkano::sampler::Filter::Linear,
+                                   vulkano::sampler::MipmapMode::Nearest,
+                                   vulkano::sampler::SamplerAddressMode::Repeat,
+                                   vulkano::sampler::SamplerAddressMode::Repeat,
+                                   vulkano::sampler::SamplerAddressMode::Repeat,
+                                   0.0, 1.0, 0.0, 0.0).unwrap();
+                                                            
+
     let pipeline = Arc::new(GraphicsPipeline::start()
                             .vertex_input_single_buffer()
                             .vertex_shader(vs.main_entry_point(), ())
-                            .triangle_list()
+                            .triangle_strip()
                             .viewports(iter::once(Viewport {
                                 origin: [0.0, 0.0],
                                 depth_range: 0.0 .. 1.0,
@@ -185,6 +220,10 @@ void main() {
                             .render_pass(Subpass::from(render_pass.clone(), 0).unwrap())
                             .build(device.clone())
                             .unwrap());
+
+    let set = Arc::new(simple_descriptor_set!(pipeline.clone(), 0, {
+        tex: (texture.clone(), sampler.clone())
+    }));
 
     let framebuffers = images.iter().map(|image| {
         Arc::new(Framebuffer::start(render_pass.clone())
@@ -203,10 +242,12 @@ void main() {
 
         // Build the render command
         let command_buffer = AutoCommandBufferBuilder::new(device.clone(), queue.family()).unwrap()
+            .copy_buffer_to_image(pixel_buffer.clone(), texture.clone())
+            .unwrap()
             .begin_render_pass(framebuffers[image_num].clone(), false,
                                vec![[0.0, 0.0, 1.0, 1.0].into()])
             .unwrap()
-            .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), (), ())
+            .draw(pipeline.clone(), DynamicState::none(), vertex_buffer.clone(), set.clone(), ())
             .unwrap()
             .end_render_pass()
             .unwrap()
