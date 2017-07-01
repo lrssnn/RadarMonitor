@@ -27,23 +27,13 @@ struct Timecode {
     min: usize
 }
 
-// Download new files for any of the three radars of the program. 
-// Returns whether or not any files were downloaded
-pub fn save_all_files() -> bool {
-    let a = save_files(CODE_LOW).is_ok();
-    let b = save_files(CODE_MID).is_ok();
-    let c = save_files(CODE_HIGH).is_ok();
-
-    a || b || c
-}
-
-// Connect to the BOM ftp server and download any new files for the product code 'lc_code'
+// Connect to the BOM ftp server and download any new files 
+// Saves files for all three zoom levels
 // Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
 // new.
-// Returns whether or not any files were downloaded.
-pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
+// Returns Ok(()) if everything was ok. Propogates an error if there is an ftp error
+pub fn save_files() -> ftp::types::Result<()> {
 
-    let mut downloads = 0;
 
     // Connect to the server, login, change directory
     let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
@@ -53,44 +43,50 @@ pub fn save_files(lc_code: &str) -> ftp::types::Result<()> {
     // Find out which files are currently on the server
     let mut filenames = ftp_stream.nlst(Option::None)?;
 
-    // Retain only the correct files (right prefix and right filetype)
-    filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
+    for lc_code in [CODE_LOW, CODE_MID, CODE_HIGH].iter() {
 
-    for file_name in filenames {
-        // Prefix filename to designate it as a new file
-        let file_name_x = "x".to_string() + &file_name;
+        let mut downloads = 0;
+        let mut filenames = filenames.clone();
 
-        // Check if the file already exists locally.
-        // Open will return an error if it does not exist, so err = good.
-        // If open succeeds, the file exists and we move to the next file
-        if File::open(DL_DIR.to_string() + lc_code + "/" + &file_name).is_ok() {
-            continue;
+        // Retain only the correct files (right prefix and right filetype)
+        filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
+
+        for file_name in filenames {
+            // Prefix filename to designate it as a new file
+            let file_name_x = "x".to_string() + &file_name;
+
+            // Check if the file already exists locally.
+            // Open will return an error if it does not exist, so err = good.
+            // If open succeeds, the file exists and we move to the next file
+            if File::open(DL_DIR.to_string() + lc_code + "/" + &file_name).is_ok() {
+                continue;
+            }
+            
+            // Print a message (one line only regardless of number of files)
+            print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
+            std::io::stdout().flush().expect("Error flushing stdout");
+
+            // Get the file from the server
+            let remote_file = ftp_stream.simple_retr(&file_name)?;
+
+            // Create a new file locally
+            let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name_x)
+                .expect("Error creating file on disk");
+
+            // Write the file
+            file.write_all(remote_file.into_inner().as_slice())
+                .expect("Error writing file to disk");
+
+            downloads += 1;
         }
-        
-        // Print a message (one line only regardless of number of files)
-        print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
-        std::io::stdout().flush().expect("Error flushing stdout");
 
-        // Get the file from the server
-        let remote_file = ftp_stream.simple_retr(&file_name)?;
-
-        // Create a new file locally
-        let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name_x)
-            .expect("Error creating file on disk");
-
-        // Write the file
-        file.write_all(remote_file.into_inner().as_slice())
-            .expect("Error writing file to disk");
-
-        downloads += 1;
+        if downloads > 0 {
+            println!("");
+        }
     }
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
-    if downloads > 0 {
-        println!("");
-    }
-
     Ok(())
 }
 
@@ -140,9 +136,9 @@ pub fn init() {
     init_background(CODE_HIGH).expect("Initialisation Failure");
 
     // Any pre-existing files will not be prefixed, and will not be re-downloaded by
-    // save_all_files(), once that has completed we re-prefix the pre-existing files to be made
+    // save_files(), once that has completed we re-prefix the pre-existing files to be made
     // into textures by the other thread
-    save_all_files();
+    save_files();
 
     mark_files_as_new(CODE_LOW);
     mark_files_as_new(CODE_MID);

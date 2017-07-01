@@ -11,7 +11,7 @@ use std::env;
 mod image_viewer;
 
 mod downloader;
-use downloader::{save_all_files, init, wait_mins};
+use downloader::{save_files, init, wait_mins};
 
 // Configuration constants
 const DL_DIR: &'static str = "img/"; // Folder to keep images in. Relative to start dir or absolute
@@ -72,7 +72,7 @@ fn main() {
             return;
         }
 
-        while !save_all_files() {
+        while !save_files().is_ok() {
             if wait_mins(1, &finish) {
                 return;
             }
