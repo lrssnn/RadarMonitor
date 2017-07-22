@@ -140,11 +140,11 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         // Clearly I don't understand closures because I was not expecting these side effects
         // (speed and zoom) to actually make it out of the closure????
         events_loop.poll_events(|ev| {
-            match ev {
-                WindowEvent {
+            if let WindowEvent {
                     window_id: _,
                     event: e
-                } => match e {
+            } = ev {
+                match e {
                     Event::Closed => {
                         exit(finish);
                         return;
@@ -154,8 +154,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         device_id: _,
                         input: KeyboardInput {
                             state: ElementState::Released,
-                            scancode: _, 
                             virtual_keycode: Some(key),
+                            scancode: _,
                             modifiers: _
                         }
                     } => {
@@ -184,9 +184,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         }
                     }
                     _ => ()
-
                 }
-                _ => ()
             }
         });
 
