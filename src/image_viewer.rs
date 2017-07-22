@@ -1,12 +1,13 @@
 use super::glium;
-use glium::DisplayBuild;
 use glium::{Surface, VertexBuffer, IndexBuffer};
 use glium::index::PrimitiveType;
 use glium::texture::{Texture2d, RawImage2d};
 
 use glium::draw_parameters::{DrawParameters, Blend};
 
-use glium::glutin::Event::KeyboardInput;
+use glium::glutin::Event::WindowEvent;
+use glium::glutin::KeyboardInput;
+use glium::glutin::WindowEvent as Event;
 use glium::glutin::VirtualKeyCode as Key;
 use glium::glutin::ElementState;
 
@@ -46,11 +47,16 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     let mut frame_time: usize = SPEED_MID;
 
     // Open the window
-    let display = glium::glutin::WindowBuilder::new()
+    
+    let mut events_loop = glium::glutin::EventsLoop::new();
+
+    let window = glium::glutin::WindowBuilder::new()
         .with_dimensions(512, 512)
-        .with_title("Radar Monitor")
-        .build_glium()
-        .expect("Unable to create a window");
+        .with_title("Radar Monitor");
+
+    let context = glium::glutin::ContextBuilder::new();
+
+    let display = glium::Display::new(window, context, &events_loop).unwrap();
 
     let bg_textures = [texture_from_image(&display, 
                                           &(CODE_LOW.to_string() + ".background.png")),
@@ -130,41 +136,59 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
         target.finish().expect("Frame Finishing Error");
 
-        for ev in display.poll_events() {
+        // This is so ugly
+        // Clearly I don't understand closures because I was not expecting these side effects
+        // (speed and zoom) to actually make it out of the closure????
+        events_loop.poll_events(|ev| {
             match ev {
-                glium::glutin::Event::Closed => {
-                    exit(finish);
-                    return;
-                }
-
-                KeyboardInput(ElementState::Released, _, Some(key)) => {
-                    match key {
-                        Key::Escape => {
-                            exit(finish);
-                            return;
-                        }
-                        Key::PageUp   => frame_time = change_speed(frame_time, true),
-                        Key::PageDown => frame_time = change_speed(frame_time, false),
-                        Key::LBracket | Key::End => {
-                            zoom = change_zoom(zoom, false);
-                            if textures[zoom].len() <= index {
-                                index = 0;
-                            };
-                            force_redraw = true;
-                        },
-                        Key::RBracket | Key::Home => {
-                            zoom = change_zoom(zoom, true);
-                            if textures[zoom].len() <= index {
-                                index = 0;
-                            };
-                            force_redraw = true;
-                        },
-                        _ => (),
+                WindowEvent {
+                    window_id: _,
+                    event: e
+                } => match e {
+                    Event::Closed => {
+                        exit(finish);
+                        return;
                     }
+
+                    Event::KeyboardInput {
+                        device_id: _,
+                        input: KeyboardInput {
+                            state: ElementState::Released,
+                            scancode: _, 
+                            virtual_keycode: Some(key),
+                            modifiers: _
+                        }
+                    } => {
+                        match key {
+                            Key::Escape => {
+                                exit(finish);
+                                return;
+                            }
+                            Key::Semicolon => frame_time = change_speed(frame_time, false),
+                            Key::Apostrophe => frame_time = change_speed(frame_time, true),
+                            Key::LBracket | Key::End => {
+                                zoom = change_zoom(zoom, false);
+                                if textures[zoom].len() <= index {
+                                    index = 0;
+                                };
+                                force_redraw = true;
+                            },
+                            Key::RBracket | Key::Home => {
+                                zoom = change_zoom(zoom, true);
+                                if textures[zoom].len() <= index {
+                                    index = 0;
+                                }
+                                force_redraw = true;
+                            },
+                            _ => (),
+                        }
+                    }
+                    _ => ()
+
                 }
-                _ => (),
+                _ => ()
             }
-        }
+        });
 
         // Wait until the frame time has elapsed
         // 20 millisecond increments are ugly but reduce processor usage a lot and
@@ -298,7 +322,7 @@ fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
 
     let image_dim = image.dimensions();
 
-    let image = RawImage2d::from_raw_rgba_reversed(image.into_raw(), image_dim);
+    let image = RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dim);
 
     Texture2d::new(display, image).expect("Error creating texture from image")
 
