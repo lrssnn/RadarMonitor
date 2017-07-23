@@ -43,7 +43,7 @@ pub fn save_files() -> ftp::types::Result<()> {
     // Find out which files are currently on the server
     let filenames = ftp_stream.nlst(Option::None)?;
 
-    for lc_code in [CODE_LOW, CODE_MID, CODE_HIGH].iter() {
+    for lc_code in &[CODE_LOW, CODE_MID, CODE_HIGH]{
 
         let mut downloads = 0;
         let mut filenames = filenames.clone();

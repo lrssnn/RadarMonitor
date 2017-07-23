@@ -31,8 +31,8 @@ extern crate image;
 
 #[derive(Copy, Clone)]
 struct Vertex {
-    pub position: [f32; 2],
-    pub texture_pos: [f32; 2],
+    position: [f32; 2],
+    texture_pos: [f32; 2],
 }
 
 implement_vertex!(Vertex, position, texture_pos);
@@ -133,8 +133,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         events_loop.poll_events(|ev| {
             // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
             if let WindowEvent {
-                    window_id: _,
-                    event: e
+                    event: e,
+                    ..
             } = ev {
                 match e {
                     Event::Closed => {
@@ -143,13 +143,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                     }
 
                     Event::KeyboardInput {
-                        device_id: _,
                         input: KeyboardInput {
                             state: ElementState::Released,
                             virtual_keycode: Some(key),
-                            scancode: _,
-                            modifiers: _
-                        }
+                            ..
+                        },
+                        ..
                     } => {
                         match key {
                             Key::Escape => {
