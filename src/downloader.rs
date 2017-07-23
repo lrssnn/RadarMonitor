@@ -41,7 +41,7 @@ pub fn save_files() -> ftp::types::Result<()> {
     ftp_stream.cwd("anon/gen/radar")?;
 
     // Find out which files are currently on the server
-    let mut filenames = ftp_stream.nlst(Option::None)?;
+    let filenames = ftp_stream.nlst(Option::None)?;
 
     for lc_code in [CODE_LOW, CODE_MID, CODE_HIGH].iter() {
 
@@ -124,7 +124,7 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
 
 // Run first time initialisation tasks such as creating directories and priming with images
 // Will panic if initialisation fails
-pub fn init() {
+pub fn init(){
     // Attempt to create the download directory, not caring if it succeeds or if it fails 
     // (the directory already exists)
     match fs::create_dir(DL_DIR) {
@@ -138,7 +138,7 @@ pub fn init() {
     // Any pre-existing files will not be prefixed, and will not be re-downloaded by
     // save_files(), once that has completed we re-prefix the pre-existing files to be made
     // into textures by the other thread
-    save_files();
+    save_files().ok();
 
     mark_files_as_new(CODE_LOW);
     mark_files_as_new(CODE_MID);

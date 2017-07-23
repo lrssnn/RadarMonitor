@@ -32,11 +32,20 @@ extern crate image;
 #[derive(Copy, Clone)]
 struct Vertex {
     pub position: [f32; 2],
-    pub colour: [f32; 3],
     pub texture_pos: [f32; 2],
 }
 
-implement_vertex!(Vertex, position, colour, texture_pos);
+implement_vertex!(Vertex, position, texture_pos);
+
+// Constants to define the vertices of the square
+const VERTICES: [Vertex; 4] = [
+    Vertex { position: [-1.0,  1.0], texture_pos: [0.0, 1.0]},
+    Vertex { position: [-1.0, -1.0], texture_pos: [0.0, 0.0]},
+    Vertex { position: [ 1.0,  1.0], texture_pos: [1.0, 1.0]},
+    Vertex { position: [ 1.0, -1.0], texture_pos: [1.0, 0.0]},
+];
+
+const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
@@ -47,30 +56,27 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     let mut frame_time: usize = SPEED_MID;
 
     // Open the window
-    
     let mut events_loop = glium::glutin::EventsLoop::new();
-
     let window = glium::glutin::WindowBuilder::new()
         .with_dimensions(512, 512)
         .with_title("Radar Monitor");
-
     let context = glium::glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop)
+        .expect("Failed to create display");
 
-    let display = glium::Display::new(window, context, &events_loop).unwrap();
+    // Create background textures which never change
+    let bg_textures = [
+        texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
+        texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
+        texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png"))
+    ];
+    let lc_textures = [
+        texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
+        texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
+        texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png"))
+    ];
 
-    let bg_textures = [texture_from_image(&display, 
-                                          &(CODE_LOW.to_string() + ".background.png")),
-                       texture_from_image(&display, 
-                                          &(CODE_MID.to_string() + ".background.png")),
-                       texture_from_image(&display, 
-                                          &(CODE_HIGH.to_string() + ".background.png"))];
-    let lc_textures = [texture_from_image(&display, 
-                                          &(CODE_LOW.to_string() + ".locations.png")),
-                       texture_from_image(&display, 
-                                          &(CODE_MID.to_string() + ".locations.png")),
-                       texture_from_image(&display, 
-                                          &(CODE_HIGH.to_string() + ".locations.png"))];
-
+    // Extremely simple shader
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
         const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
@@ -78,59 +84,44 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
             .expect("Error creating shader program")
     };
 
-    let vertices = vec![
-        Vertex { position: [-1.0,  1.0], colour: [0.0; 3], texture_pos: [0.0, 1.0]},
-        Vertex { position: [-1.0, -1.0], colour: [0.0; 3], texture_pos: [0.0, 0.0]},
-        Vertex { position: [ 1.0,  1.0], colour: [0.0; 3], texture_pos: [1.0, 1.0]},
-        Vertex { position: [ 1.0, -1.0], colour: [0.0; 3], texture_pos: [1.0, 0.0]},
-    ];
-
-    let vertices = VertexBuffer::new(&display, &vertices).expect("Error creating vertex buffer");
-
-    let indices: Vec<u16> = vec![
-        0, 2, 1,
-        1, 3, 2,
-    ];
-
-    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &indices)
+    // Create Vertex and Index buffer from constant verts and indices
+    let vertices = VertexBuffer::new(&display, &VERTICES)
+        .expect("Error creating vertex buffer");
+    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &INDICES)
         .expect("Error creating index buffer");
 
     let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
+    // Set up our textures
     let mut textures = create_all_textures_from_files(&display);
-
     let mut zoom = 1;
 
     loop {
+        // Grab the display and clear it
         let mut target = display.draw();
-
         target.clear_color(0.0, 0.0, 0.0, 0.0);
-
-        target.draw(&vertices,
-                  &indices,
-                  &program,
+        
+        // Draw the background
+        target.draw(&vertices, &indices, &program,
                   &uniform! {
                         tex: &bg_textures[zoom],
-                    },
-                  &Default::default())
-            .expect("Drawing Error");
-
-
-        target.draw(&vertices,
-                  &indices,
-                  &program,
-                  &uniform! {
-                        tex: &lc_textures[zoom],
-                    },
+                  },
                   &params)
             .expect("Drawing Error");
 
-        target.draw(&vertices,
-                  &indices,
-                  &program,
+        // Draw the map overlay
+        target.draw(&vertices, &indices, &program,
+                  &uniform! {
+                        tex: &lc_textures[zoom],
+                  },
+                  &params)
+            .expect("Drawing Error");
+
+        // Draw the radar data
+        target.draw(&vertices, &indices, &program,
                   &uniform! {
                         tex: &textures[zoom][index],
-                    },
+                  },
                   &params)
             .expect("Drawing Error");
 
@@ -140,6 +131,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         // Clearly I don't understand closures because I was not expecting these side effects
         // (speed and zoom) to actually make it out of the closure????
         events_loop.poll_events(|ev| {
+            // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
             if let WindowEvent {
                     window_id: _,
                     event: e
@@ -197,6 +189,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
             thread::sleep(Duration::from_millis(20));
         }
 
+        // Next image (with wraparound)
         index = {
             if index + 1 < textures[zoom].len() {
                 index + 1
@@ -208,10 +201,9 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         last_frame = Instant::now();
         force_redraw = false;
 
-        // Check if we should update if we are looping over to the start again
+        // Check for new images if we just wrapped around
         if index == 0 {
             let update = update.swap(false, Ordering::Relaxed);
-
             if update {
                 add_all_new_textures(&display, &mut textures);
             }
@@ -287,7 +279,9 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
         })
         .collect();
 
-    let mut file_names = file_names.iter().filter(|e| e.starts_with('x')).collect::<Vec<_>>();
+    let mut file_names = file_names.iter().filter(|e| 
+        e.starts_with('x')
+    ).collect::<Vec<_>>();
 
     file_names.sort();
 
