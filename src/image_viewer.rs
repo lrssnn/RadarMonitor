@@ -66,17 +66,17 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
     // Create background textures which never change
     let bg_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string() + ".background.png")),
-        texture_from_image(&display, &(CODE_MID.to_string() + ".background.png")),
+        texture_from_image(&display, &(CODE_LOW.to_string()  + ".background.png")),
+        texture_from_image(&display, &(CODE_MID.to_string()  + ".background.png")),
         texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png"))
     ];
     let lc_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string() + ".locations.png")),
-        texture_from_image(&display, &(CODE_MID.to_string() + ".locations.png")),
+        texture_from_image(&display, &(CODE_LOW.to_string()  + ".locations.png")),
+        texture_from_image(&display, &(CODE_MID.to_string()  + ".locations.png")),
         texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png"))
     ];
 
-    // Extremely simple shader
+    // Extremely simple shader program
     let program = {
         const VERT_SHADER: &'static str = include_str!("res/shader.vert");
         const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
@@ -85,9 +85,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     };
 
     // Create Vertex and Index buffer from constant verts and indices
-    let vertices = VertexBuffer::new(&display, &VERTICES)
-        .expect("Error creating vertex buffer");
-    let indices = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &INDICES)
+    let vb = VertexBuffer::new(&display, &VERTICES).expect("Error creating vertex buffer");
+    let ib = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &INDICES)
         .expect("Error creating index buffer");
 
     let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
@@ -102,27 +101,15 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         target.clear_color(0.0, 0.0, 0.0, 0.0);
         
         // Draw the background
-        target.draw(&vertices, &indices, &program,
-                  &uniform! {
-                        tex: &bg_textures[zoom],
-                  },
-                  &params)
+        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)
             .expect("Drawing Error");
 
         // Draw the map overlay
-        target.draw(&vertices, &indices, &program,
-                  &uniform! {
-                        tex: &lc_textures[zoom],
-                  },
-                  &params)
+        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)
             .expect("Drawing Error");
 
         // Draw the radar data
-        target.draw(&vertices, &indices, &program,
-                  &uniform! {
-                        tex: &textures[zoom][index],
-                  },
-                  &params)
+        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)
             .expect("Drawing Error");
 
         target.finish().expect("Frame Finishing Error");
@@ -130,17 +117,16 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         // This is so ugly
         // Clearly I don't understand closures because I was not expecting these side effects
         // (speed and zoom) to actually make it out of the closure????
+        let mut done = false;
         events_loop.poll_events(|ev| {
+            use self::Key::*;
             // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
             if let WindowEvent {
                     event: e,
                     ..
             } = ev {
                 match e {
-                    Event::Closed => {
-                        exit(finish);
-                        return;
-                    }
+                    Event::Closed => done = true,
 
                     Event::KeyboardInput {
                         input: KeyboardInput {
@@ -151,20 +137,17 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                         ..
                     } => {
                         match key {
-                            Key::Escape => {
-                                exit(finish);
-                                return;
-                            }
-                            Key::Semicolon => frame_time = change_speed(frame_time, false),
-                            Key::Apostrophe => frame_time = change_speed(frame_time, true),
-                            Key::LBracket | Key::End => {
+                            Escape     => done = true,
+                            Semicolon  => frame_time = change_speed(frame_time, false),
+                            Apostrophe => frame_time = change_speed(frame_time, true),
+                            LBracket | End => {
                                 zoom = change_zoom(zoom, false);
                                 if textures[zoom].len() <= index {
                                     index = 0;
                                 };
                                 force_redraw = true;
                             },
-                            Key::RBracket | Key::Home => {
+                            RBracket | Home => {
                                 zoom = change_zoom(zoom, true);
                                 if textures[zoom].len() <= index {
                                     index = 0;
@@ -178,6 +161,11 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                 }
             }
         });
+
+        if done {
+            exit(finish);
+            return;
+        }
 
         // Wait until the frame time has elapsed
         // 20 millisecond increments are ugly but reduce processor usage a lot and
@@ -210,6 +198,12 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     }
 }
 
+// Just a more wrapper to be more readable at the draw call. Ugly type signature
+fn uniform_tex(tex: &Texture2d) -> glium::uniforms::UniformsStorage<&Texture2d, glium::uniforms::EmptyUniforms> {
+    uniform! {
+        tex: tex
+    }
+}
 
 fn exit(terminate: &Arc<AtomicBool>) {
     terminate.store(true, Ordering::Relaxed);
@@ -226,6 +220,20 @@ fn change_zoom(zoom: usize, faster: bool) -> usize {
         1
     } else {
         0
+    }
+}
+
+fn change_speed(current: usize, increase: bool) -> usize {
+    if increase {
+        if current == SPEED_SLOW {
+            SPEED_MID
+        } else {
+            SPEED_FAST
+        }
+    } else if current == SPEED_FAST {
+        SPEED_MID
+    } else {
+        SPEED_SLOW
     }
 }
 
@@ -294,19 +302,6 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
     }
 }
 
-fn change_speed(current: usize, increase: bool) -> usize {
-    if increase {
-        if current == SPEED_SLOW {
-            SPEED_MID
-        } else {
-            SPEED_FAST
-        }
-    } else if current == SPEED_FAST {
-        SPEED_MID
-    } else {
-        SPEED_SLOW
-    }
-}
 
 fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
     let image = image::open(img).expect("Error opening image file").to_rgba();
