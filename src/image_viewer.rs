@@ -11,6 +11,8 @@ use glium::glutin::WindowEvent as Event;
 use glium::glutin::VirtualKeyCode as Key;
 use glium::glutin::ElementState;
 
+use glium::uniforms::{UniformsStorage, EmptyUniforms};
+
 use std::str;
 use std::fs;
 use std::thread;
@@ -56,25 +58,10 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     let mut frame_time: usize = SPEED_MID;
 
     // Open the window
-    let mut events_loop = glium::glutin::EventsLoop::new();
-    let window = glium::glutin::WindowBuilder::new()
-        .with_dimensions(512, 512)
-        .with_title("Radar Monitor");
-    let context = glium::glutin::ContextBuilder::new();
-    let display = glium::Display::new(window, context, &events_loop)
-        .expect("Failed to create display");
+    let (display, mut events_loop) = create_display();
 
     // Create background textures which never change
-    let bg_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string()  + ".background.png")),
-        texture_from_image(&display, &(CODE_MID.to_string()  + ".background.png")),
-        texture_from_image(&display, &(CODE_HIGH.to_string() + ".background.png"))
-    ];
-    let lc_textures = [
-        texture_from_image(&display, &(CODE_LOW.to_string()  + ".locations.png")),
-        texture_from_image(&display, &(CODE_MID.to_string()  + ".locations.png")),
-        texture_from_image(&display, &(CODE_HIGH.to_string() + ".locations.png"))
-    ];
+    let (bg_textures, lc_textures) = background_init(&display);
 
     // Extremely simple shader program
     let program = {
@@ -100,15 +87,13 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         let mut target = display.draw();
         target.clear_color(0.0, 0.0, 0.0, 0.0);
         
-        // Draw the background
+        // Draw the background, then map overlay, then radar data
         target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)
             .expect("Drawing Error");
 
-        // Draw the map overlay
         target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)
             .expect("Drawing Error");
 
-        // Draw the radar data
         target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)
             .expect("Drawing Error");
 
@@ -121,10 +106,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         events_loop.poll_events(|ev| {
             use self::Key::*;
             // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
-            if let WindowEvent {
-                    event: e,
-                    ..
-            } = ev {
+            if let WindowEvent { event: e, .. } = ev {
                 match e {
                     Event::Closed => done = true,
 
@@ -157,7 +139,7 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
                             _ => (),
                         }
                     }
-                    _ => ()
+                    _ => (),
                 }
             }
         });
@@ -198,11 +180,24 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
     }
 }
 
-// Just a more wrapper to be more readable at the draw call. Ugly type signature
-fn uniform_tex(tex: &Texture2d) -> glium::uniforms::UniformsStorage<&Texture2d, glium::uniforms::EmptyUniforms> {
+// Just a wrapper to be more readable at the draw call. 
+fn uniform_tex(tex: &Texture2d) -> UniformsStorage<&Texture2d, EmptyUniforms> {
     uniform! {
         tex: tex
     }
+}
+
+// Open a window and return the display and the associated events loop
+fn create_display() -> (glium::Display, glium::glutin::EventsLoop) {
+    let events_loop = glium::glutin::EventsLoop::new();
+    let window = glium::glutin::WindowBuilder::new()
+        .with_dimensions(512, 512)
+        .with_title("Radar Monitor");
+    let context = glium::glutin::ContextBuilder::new();
+    let display = glium::Display::new(window, context, &events_loop)
+        .expect("Failed to create display");
+
+    (display, events_loop)
 }
 
 fn exit(terminate: &Arc<AtomicBool>) {
@@ -235,6 +230,18 @@ fn change_speed(current: usize, increase: bool) -> usize {
     } else {
         SPEED_SLOW
     }
+}
+
+// Create background and location texture arrays. Just to clean up init in main function
+fn background_init(display: &glium::Display) -> ([Texture2d; 3], [Texture2d; 3]) {
+    // What is formatting
+    ([texture_from_image(display, &(CODE_LOW.to_string()  + ".background.png")),
+      texture_from_image(display, &(CODE_MID.to_string()  + ".background.png")),
+      texture_from_image(display, &(CODE_HIGH.to_string() + ".background.png"))],
+     [texture_from_image(display, &(CODE_LOW.to_string()  + ".locations.png")),
+      texture_from_image(display, &(CODE_MID.to_string()  + ".locations.png")),
+      texture_from_image(display, &(CODE_HIGH.to_string() + ".locations.png"))
+    ])
 }
 
 fn create_all_textures_from_files(display: &glium::Display) -> [Vec<Texture2d>; 3] {
