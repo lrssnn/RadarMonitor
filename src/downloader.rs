@@ -8,8 +8,7 @@ use std::fs;
 use std::fs::File;
 use std::thread::sleep;
 use std::time::Duration;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use ftp::FtpStream;
 
 use super::DL_DIR;
@@ -93,7 +92,7 @@ pub fn save_files() -> ftp::types::Result<()> {
 // Wait for 'mins' minutes while printing a report of how long remains.
 // Regularly monitors 'terminate' and returns early if it goes true.
 // Returns true if terminated early, otherwise false.
-pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
+pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
     let mut secs = mins * 60;
 
     let one_sec = Duration::new(1, 0);
@@ -104,8 +103,7 @@ pub fn wait_mins(mins: usize, terminate: &Arc<AtomicBool>) -> bool {
 
         sleep(one_sec);
 
-        let terminate = terminate.load(Ordering::Relaxed);
-        if terminate {
+        if terminate.try_recv().is_ok() {
             println!("");
             return true;
         }

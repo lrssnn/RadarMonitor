@@ -18,8 +18,7 @@ use std::fs;
 use std::thread;
 use std::time::{Instant, Duration};
 use std::iter::Iterator;
-use std::sync::Arc;
-use std::sync::atomic::{Ordering, AtomicBool};
+use std::sync::mpsc;
 
 use super::SPEED_SLOW;
 use super::SPEED_MID;
@@ -50,7 +49,7 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
+pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) {
 
     let mut index        = 0;
     let mut zoom         = 1;
@@ -163,11 +162,8 @@ pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
         force_redraw = false;
 
         // Check for new images if we just wrapped around
-        if index == 0 {
-            let update = update.swap(false, Ordering::Relaxed);
-            if update {
-                add_all_new_textures(&display, &mut textures);
-            }
+        if index == 0 && update.try_recv().is_ok() {
+            add_all_new_textures(&display, &mut textures);
         }
     }
 }
@@ -199,8 +195,8 @@ fn link_shader(display: &glium::Display) -> glium::Program {
         .expect("Error creating shader program")
 }
 
-fn exit(terminate: &Arc<AtomicBool>) {
-    terminate.store(true, Ordering::Relaxed);
+fn exit(terminate: &mpsc::Sender<()>) {
+    terminate.send(()).unwrap();
 }
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
