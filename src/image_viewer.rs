@@ -52,35 +52,27 @@ const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &Arc<AtomicBool>, update: &Arc<AtomicBool>) {
 
-    let mut index = 0;
+    let mut index        = 0;
+    let mut zoom         = 1;
     let mut force_redraw = false;
-    let mut last_frame = Instant::now();
-    let mut frame_time: usize = SPEED_MID;
+    let mut last_frame   = Instant::now();
+    let mut frame_time   = SPEED_MID;
 
     // Open the window
     let (display, mut events_loop) = create_display();
 
-    // Create background textures which never change
+    // Do a bunch of init garbage
     let (bg_textures, lc_textures) = background_init(&display);
+    let program = link_shader(&display);
+    let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
-    // Extremely simple shader program
-    let program = {
-        const VERT_SHADER: &'static str = include_str!("res/shader.vert");
-        const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
-        glium::Program::from_source(&display, VERT_SHADER, FRAG_SHADER, None)
-            .expect("Error creating shader program")
-    };
-
-    // Create Vertex and Index buffer from constant verts and indices
-    let vb = VertexBuffer::new(&display, &VERTICES).expect("Error creating vertex buffer");
+    let vb = VertexBuffer::new(&display, &VERTICES)
+        .expect("Error creating vertex buffer");
     let ib = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &INDICES)
         .expect("Error creating index buffer");
 
-    let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
-
     // Set up our textures
     let mut textures = create_all_textures_from_files(&display);
-    let mut zoom = 1;
 
     loop {
         // Grab the display and clear it
@@ -198,6 +190,13 @@ fn create_display() -> (glium::Display, glium::glutin::EventsLoop) {
         .expect("Failed to create display");
 
     (display, events_loop)
+}
+
+fn link_shader(display: &glium::Display) -> glium::Program {
+    const VERT_SHADER: &'static str = include_str!("res/shader.vert");
+    const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
+    glium::Program::from_source(display, VERT_SHADER, FRAG_SHADER, None)
+        .expect("Error creating shader program")
 }
 
 fn exit(terminate: &Arc<AtomicBool>) {
