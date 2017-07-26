@@ -52,10 +52,8 @@ const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) 
                                                             -> Result<(), DrawError> {
-
     let mut index        = 0;
     let mut zoom         = 1;
-    let mut force_redraw = false;
     let mut last_frame   = Instant::now();
     let mut frame_time   = SPEED_MID;
 
@@ -80,62 +78,63 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
 
         target.finish().expect("Frame Finishing Error");
 
-        // This is so ugly
-        // Clearly I don't understand closures because I was not expecting these side effects
-        // (speed and zoom) to actually make it out of the closure????
-        let mut done = false;
-        events_loop.poll_events(|ev| {
-            use self::Key::*;
-            // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
-            if let WindowEvent { event: e, .. } = ev {
-                match e {
-                    Event::Closed => done = true,
-
-                    Event::KeyboardInput {
-                        input: KeyboardInput {
-                            state: ElementState::Released,
-                            virtual_keycode: Some(key),
-                            ..
-                        },
-                        ..
-                    } => {
-                        match key {
-                            Escape     => done = true,
-                            Semicolon  => frame_time = change_speed(frame_time, false),
-                            Apostrophe => frame_time = change_speed(frame_time, true),
-                            LBracket | End => {
-                                zoom = change_zoom(zoom, false);
-                                if textures[zoom].len() <= index {
-                                    index = 0;
-                                };
-                                force_redraw = true;
-                            },
-                            RBracket | Home => {
-                                zoom = change_zoom(zoom, true);
-                                if textures[zoom].len() <= index {
-                                    index = 0;
-                                }
-                                force_redraw = true;
-                            },
-                            _ => (),
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        });
-
-        if done {
-            exit(finish);
-            return Ok(());
-        }
 
         // Wait until the frame time has elapsed
         // 20 millisecond increments are ugly but reduce processor usage a lot and
         // don't seem to effect visual framerate
+        // This is so ugly
+        // Clearly I don't understand closures because I was not expecting these side effects
+        // (speed and zoom) to actually make it out of the closure????
         let frame_time_nanos = (frame_time * 1000000) as u32;
+        let mut force_redraw = false;
         while !force_redraw && 
-              (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+            (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+            let mut done = false;
+            events_loop.poll_events(|ev| {
+                use self::Key::*;
+                // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
+                if let WindowEvent { event: e, .. } = ev {
+                    match e {
+                        Event::Closed => done = true,
+
+                        Event::KeyboardInput {
+                            input: KeyboardInput {
+                                state: ElementState::Released,
+                                virtual_keycode: Some(key),
+                                ..
+                            },
+                            ..
+                        } => {
+                            match key {
+                                Escape     => done = true,
+                                Semicolon  => frame_time = change_speed(frame_time, false),
+                                Apostrophe => frame_time = change_speed(frame_time, true),
+                                LBracket | End => {
+                                    zoom = change_zoom(zoom, false);
+                                    force_redraw = true;
+                                    if textures[zoom].len() <= index {
+                                        index = 0;
+                                    };
+                                },
+                                RBracket | Home => {
+                                    zoom = change_zoom(zoom, true);
+                                    force_redraw = true;
+                                    if textures[zoom].len() <= index {
+                                        index = 0;
+                                    }
+                                },
+                                _ => (),
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            });
+
+            if done {
+                exit(finish);
+                return Ok(());
+            }
             thread::sleep(Duration::from_millis(20));
         }
 
@@ -149,7 +148,6 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
         };
 
         last_frame = Instant::now();
-        force_redraw = false;
 
         // Check for new images if we just wrapped around
         if index == 0 && update.try_recv().is_ok() {
