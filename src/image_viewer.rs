@@ -3,6 +3,7 @@ use glium::{Surface, VertexBuffer, IndexBuffer};
 use glium::index::PrimitiveType;
 use glium::texture::{Texture2d, RawImage2d};
 
+use glium::DrawError;
 use glium::draw_parameters::{DrawParameters, Blend};
 
 use glium::glutin::Event::WindowEvent;
@@ -49,7 +50,8 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) {
+pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) 
+                                                            -> Result<(), DrawError> {
 
     let mut index        = 0;
     let mut zoom         = 1;
@@ -57,21 +59,14 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) {
     let mut last_frame   = Instant::now();
     let mut frame_time   = SPEED_MID;
 
-    // Open the window
-    let (display, mut events_loop) = create_display();
-
     // Do a bunch of init garbage
+    let (display, mut events_loop) = create_display();
     let (bg_textures, lc_textures) = background_init(&display);
-    let program = link_shader(&display);
-    let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
-
-    let vb = VertexBuffer::new(&display, &VERTICES)
-        .expect("Error creating vertex buffer");
-    let ib = IndexBuffer::new(&display, PrimitiveType::TrianglesList, &INDICES)
-        .expect("Error creating index buffer");
-
-    // Set up our textures
+    let program      = link_shader(&display);
+    let (vb, ib)     = create_buffers(&display);
     let mut textures = create_all_textures_from_files(&display);
+
+    let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
     loop {
         // Grab the display and clear it
@@ -79,14 +74,9 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) {
         target.clear_color(0.0, 0.0, 0.0, 0.0);
         
         // Draw the background, then map overlay, then radar data
-        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)
-            .expect("Drawing Error");
-
-        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)
-            .expect("Drawing Error");
-
-        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)
-            .expect("Drawing Error");
+        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)?;
+        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)?;
+        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)?;
 
         target.finish().expect("Frame Finishing Error");
 
@@ -137,7 +127,7 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) {
 
         if done {
             exit(finish);
-            return;
+            return Ok(());
         }
 
         // Wait until the frame time has elapsed
@@ -178,10 +168,13 @@ fn uniform_tex(tex: &Texture2d) -> UniformsStorage<&Texture2d, EmptyUniforms> {
 // Open a window and return the display and the associated events loop
 fn create_display() -> (glium::Display, glium::glutin::EventsLoop) {
     let events_loop = glium::glutin::EventsLoop::new();
+
     let window = glium::glutin::WindowBuilder::new()
         .with_dimensions(512, 512)
         .with_title("Radar Monitor");
+
     let context = glium::glutin::ContextBuilder::new();
+
     let display = glium::Display::new(window, context, &events_loop)
         .expect("Failed to create display");
 
@@ -193,6 +186,15 @@ fn link_shader(display: &glium::Display) -> glium::Program {
     const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
     glium::Program::from_source(display, VERT_SHADER, FRAG_SHADER, None)
         .expect("Error creating shader program")
+}
+
+fn create_buffers(display: &glium::Display) -> (VertexBuffer<Vertex>, IndexBuffer<u16>) {
+    let vb = VertexBuffer::new(display, &VERTICES)
+        .expect("Error creating vertex buffer");
+    let ib = IndexBuffer::new(display, PrimitiveType::TrianglesList, &INDICES)
+        .expect("Error creating index buffer");
+
+    (vb, ib)
 }
 
 fn exit(terminate: &mpsc::Sender<()>) {

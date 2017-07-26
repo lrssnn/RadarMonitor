@@ -53,7 +53,7 @@ fn main() {
 
     // Start the thread which displays the window
     thread::spawn(move || {
-        image_viewer::open_window(&finish_tx, &update_rx); 
+        image_viewer::open_window(&finish_tx, &update_rx).expect("Drawing Error"); 
     });
 
     loop {
