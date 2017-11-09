@@ -50,12 +50,14 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) 
-                                                            -> Result<(), DrawError> {
-    let mut index        = 0;
-    let mut zoom         = 1;
-    let mut last_frame   = Instant::now();
-    let mut frame_time   = SPEED_MID;
+pub fn open_window(finish: &mpsc::Sender<()>, 
+                   update: &mpsc::Receiver<()>)
+                   -> Result<(), DrawError> {
+    let mut index      = 0;
+    let mut zoom       = 1;
+    let mut last_frame = Instant::now();
+    let mut frame_time = SPEED_MID;
+    let mut sleep      = false;
 
     // Do a bunch of init garbage
     let (display, mut events_loop) = create_display();
@@ -67,32 +69,100 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
     let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
     loop {
-        // Grab the display and clear it
-        let mut target = display.draw();
-        target.clear_color(0.0, 0.0, 0.0, 0.0);
+        if !sleep {
+            // Grab the display and clear it
+            let mut target = display.draw();
+            target.clear_color(0.0, 0.0, 0.0, 0.0);
+            
+            // Draw the background, then map overlay, then radar data
+            target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)?;
+            target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)?;
+            target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)?;
+
+            target.finish().expect("Frame Finishing Error");
+
+
+            // Wait until the frame time has elapsed
+            // 20 millisecond increments are ugly but reduce processor usage a lot and
+            // don't seem to effect visual framerate
+            // This is so ugly
+            // Clearly I don't understand closures because I was not expecting these side effects
+            // (speed and zoom) to actually make it out of the closure????
+            let frame_time_nanos = (frame_time * 1000000) as u32;
+            let mut force_redraw = false;
+            while !force_redraw && 
+                (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+                let mut done = false;
+                events_loop.poll_events(|ev| {
+                    use self::Key::*;
+                    // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
+                    if let WindowEvent { event: e, .. } = ev {
+                        match e {
+                            Event::Closed => done = true,
+
+                            Event::KeyboardInput {
+                                input: KeyboardInput {
+                                    state: ElementState::Released,
+                                    virtual_keycode: Some(key),
+                                    ..
+                                },
+                                ..
+                            } => {
+                                match key {
+                                    Escape   => done = true,
+                                    PageDown => frame_time = change_speed(frame_time, false),
+                                    PageUp   => frame_time = change_speed(frame_time, true),
+                                    LBracket | End => {
+                                        zoom = change_zoom(zoom, false);
+                                        force_redraw = true;
+                                        if textures[zoom].len() <= index {
+                                            index = 0;
+                                        };
+                                    },
+                                    RBracket | Home => {
+                                        zoom = change_zoom(zoom, true);
+                                        force_redraw = true;
+                                        if textures[zoom].len() <= index {
+                                            index = 0;
+                                        }
+                                    },
+                                    Backspace => sleep = true,
+                                    _ => (),
+                                }
+                            }
+                            _ => (),
+                        }
+                    }
+                });
+
+                if done {
+                    exit(finish);
+                    return Ok(());
+                }
+                thread::sleep(Duration::from_millis(20));
+            }
+
+            // Next image (with wraparound)
+            index = {
+                if index + 1 < textures[zoom].len() {
+                    index + 1
+                } else {
+                    0
+                }
+            };
+
+            last_frame = Instant::now();
+
+            // Check for new images if we just wrapped around
+            if index == 0 && update.try_recv().is_ok() {
+                add_all_new_textures(&display, &mut textures);
+            }
         
-        // Draw the background, then map overlay, then radar data
-        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)?;
-        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)?;
-        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)?;
-
-        target.finish().expect("Frame Finishing Error");
-
-
-        // Wait until the frame time has elapsed
-        // 20 millisecond increments are ugly but reduce processor usage a lot and
-        // don't seem to effect visual framerate
-        // This is so ugly
-        // Clearly I don't understand closures because I was not expecting these side effects
-        // (speed and zoom) to actually make it out of the closure????
-        let frame_time_nanos = (frame_time * 1000000) as u32;
-        let mut force_redraw = false;
-        while !force_redraw && 
-            (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
+        } else {
+            // We are asleep, just check for close or unsleep, and delay for a long time
             let mut done = false;
             events_loop.poll_events(|ev| {
                 use self::Key::*;
-                // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
                 if let WindowEvent { event: e, .. } = ev {
                     match e {
                         Event::Closed => done = true,
@@ -106,23 +176,8 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
                             ..
                         } => {
                             match key {
-                                Escape   => done = true,
-                                PageDown => frame_time = change_speed(frame_time, false),
-                                PageUp   => frame_time = change_speed(frame_time, true),
-                                LBracket | End => {
-                                    zoom = change_zoom(zoom, false);
-                                    force_redraw = true;
-                                    if textures[zoom].len() <= index {
-                                        index = 0;
-                                    };
-                                },
-                                RBracket | Home => {
-                                    zoom = change_zoom(zoom, true);
-                                    force_redraw = true;
-                                    if textures[zoom].len() <= index {
-                                        index = 0;
-                                    }
-                                },
+                                Escape => done  = true,
+                                Enter  => sleep = false,
                                 _ => (),
                             }
                         }
@@ -135,25 +190,10 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
                 exit(finish);
                 return Ok(());
             }
-            thread::sleep(Duration::from_millis(20));
-        }
-
-        // Next image (with wraparound)
-        index = {
-            if index + 1 < textures[zoom].len() {
-                index + 1
-            } else {
-                0
-            }
-        };
-
-        last_frame = Instant::now();
-
-        // Check for new images if we just wrapped around
-        if index == 0 && update.try_recv().is_ok() {
-            add_all_new_textures(&display, &mut textures);
+            thread::sleep(Duration::from_millis(1000));
         }
     }
+
 }
 
 // Just a wrapper to be more readable at the draw call. 
