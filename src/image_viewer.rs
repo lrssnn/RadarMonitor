@@ -106,9 +106,9 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>)
                             ..
                         } => {
                             match key {
-                                Escape     => done = true,
-                                Semicolon  => frame_time = change_speed(frame_time, false),
-                                Apostrophe => frame_time = change_speed(frame_time, true),
+                                Escape   => done = true,
+                                PageDown => frame_time = change_speed(frame_time, false),
+                                PageUp   => frame_time = change_speed(frame_time, true),
                                 LBracket | End => {
                                     zoom = change_zoom(zoom, false);
                                     force_redraw = true;
