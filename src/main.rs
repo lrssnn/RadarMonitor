@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate glium;
 extern crate ftp;
+extern crate firebase;
 
 use std::thread;
 use std::sync::mpsc;
@@ -11,6 +12,8 @@ mod image_viewer;
 
 mod downloader;
 use downloader::{save_files, init, wait_mins};
+
+use firebase::Firebase;
 
 // Configuration constants
 const DL_DIR:    &'static str = "img/"; // Folder to keep images in.
@@ -25,7 +28,7 @@ const SPEED_FAST: usize = 60;
 
 // Main function.
 fn main() {
-   
+
     let mut clean = false;
 
     println!("Radar Monitor:");

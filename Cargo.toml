@@ -7,3 +7,4 @@ authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 ftp = "*"
 glium = "*"
 image = "*"
+firebase = { git = "https://github.com/Phrohdoh/firebase-rs.git" }
