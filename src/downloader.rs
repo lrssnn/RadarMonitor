@@ -1,5 +1,5 @@
 extern crate ftp;
-use super::firebase::Firebase;
+extern crate mongodb;
 
 use std;
 use std::str;
@@ -16,6 +16,11 @@ use super::DL_DIR;
 use super::CODE_MID;
 use super::CODE_LOW;
 use super::CODE_HIGH;
+
+use self::mongodb::Client;
+use self::mongodb::db::ThreadedDatabase;
+use self::mongodb::ThreadedClient;
+use bson::Bson;
 
 //Simple timecode struct used to determine file contiguousness
 #[derive(Debug)]
@@ -34,9 +39,9 @@ struct Timecode {
 // Returns Ok(()) if everything was ok. Propogates an error if there is an ftp error
 pub fn save_files() -> ftp::types::Result<()> {
 
-    // Open our firebase instance
-    let fb = Firebase::new("https://radarmonitor-ad000.firebaseio.com/urls.json")
-        .expect("Failed to open db");
+    // Connect to the db
+    let client = Client::connect("192.168.1.106", 27017).expect("Client Failed");
+    let urls = client.db("test").collection("urls");
 
     // Connect to the server, login, change directory
     let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
@@ -55,7 +60,6 @@ pub fn save_files() -> ftp::types::Result<()> {
         filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
 
         for file_name in filenames {
-            let fb = fb.at(&format!("{}", lc_code)).unwrap();
             // Prefix filename to designate it as a new file
             let file_name_x = "x".to_string() + &file_name;
 
@@ -82,9 +86,11 @@ pub fn save_files() -> ftp::types::Result<()> {
             file.write_all(remote_file.into_inner().as_slice())
                 .expect("Error writing file to disk");
 
-            // Push the filename to the firebase
-            let res = fb.push(&format!("{{\"url\":\"{}\"}}", &local_filename)).unwrap();
-            
+            // Put the filename in the mongodb
+            urls.insert_one(doc!{ 
+                "lc"  => lc_code.to_string(),
+                "url" => local_filename
+            }, None).unwrap();
 
             downloads += 1;
         }
