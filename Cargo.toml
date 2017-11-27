@@ -7,3 +7,5 @@ authors = ["Niklas Larsson <niklaslarsson95@gmail.com>"]
 ftp = "*"
 glium = "*"
 image = "*"
+rocket = "*"
+rocket_codegen = "*"

@@ -1,16 +1,17 @@
-#[macro_use]
-extern crate glium;
+#![feature(plugin)]
+#![plugin(rocket_codegen)]
+extern crate rocket;
+
 extern crate ftp;
 
 use std::thread;
 use std::sync::mpsc;
-
 use std::env;
-
-mod image_viewer;
 
 mod downloader;
 use downloader::{save_files, init, wait_mins};
+
+use rocket::http::RawStr;
 
 // Configuration constants
 const DL_DIR:    &'static str = "img/"; // Folder to keep images in.
@@ -23,9 +24,25 @@ const SPEED_SLOW: usize = 200;
 const SPEED_MID:  usize = 100;
 const SPEED_FAST: usize = 60;
 
+#[get("/")]
+fn index() -> &'static str {
+    "Hello Sailor"
+}
+
+#[get("/<message>")]
+fn message(message: &RawStr) -> String {
+    format!("The message is: {}", message.as_str())
+}
+
 // Main function.
 fn main() {
+
+    println!("I am a webserber");
+    rocket::ignite().mount("/", routes![index, message]).launch();
+    println!("What happens now");
+
    
+    /*
     let mut clean = false;
 
     println!("Radar Monitor:");
@@ -50,12 +67,6 @@ fn main() {
     let (update_tx, update_rx) = mpsc::channel();
     let (finish_tx, finish_rx) = mpsc::channel();
 
-
-    // Start the thread which displays the window
-    thread::spawn(move || {
-        image_viewer::open_window(&finish_tx, &update_rx).expect("Drawing Error"); 
-    });
-
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
@@ -72,4 +83,5 @@ fn main() {
         // Tell the other thread to update the image display
         update_tx.send(()).unwrap();
     }
+    */
 }
