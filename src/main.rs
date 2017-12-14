@@ -11,6 +11,10 @@ use std::thread;
 use std::sync::mpsc;
 use std::env;
 
+use std::fs;
+use std::fs::File;
+use std::path::PathBuf;
+
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
@@ -30,8 +34,7 @@ const SPEED_SLOW: usize = 200;
 const SPEED_MID:  usize = 100;
 const SPEED_FAST: usize = 60;
 
-use rocket::State;
-use rocket_contrib::Template;
+use rocket_contrib::Json;
 
 #[derive(Serialize)]
 struct IndexTemplate {
@@ -39,43 +42,57 @@ struct IndexTemplate {
 }
 
 #[get("/")]
-fn index() -> Template {
-   let context = IndexTemplate { message : "Welcome to the serber" };
-   Template::render("index", context)
+fn index() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
+    // Return an array of the available files on the server
+    
+    let dirs;
+    // If DL_DIR doesn't exist, there is nothing to clean
+    match fs::read_dir(DL_DIR) {
+        Ok(d)  => { dirs = d }
+        Err(_) => { return Err(500) }
+    };
+
+    let mut zooms = vec![];
+
+    // Iterate through the subdirectories (zoom levels)
+    for dir in dirs {
+        
+        let mut zoom_array = vec![];
+
+        let files = fs::read_dir(dir.expect("File Error").path()).expect("File Error");
+
+        // Get the path for each file
+        let mut file_names: Vec<_> = files.map(|e| {
+            e.expect("File error")
+                .path()
+        })
+        .collect();
+        file_names.sort();
+
+        // Iterate through the files
+        for filename in file_names.iter() {
+            zoom_array.push(filename.clone());
+        }
+
+        zooms.push(zoom_array);
+    }
+
+    Ok(Json(zooms))
 }
 
-#[get("/<message>")]
-fn message(message: &RawStr) -> String {
-    format!("The message is: {}", message.as_str())
+#[get("/img/<dl_dir>/<file_name>")]
+fn image(dl_dir: String, file_name: String) -> Result<File, usize> {
+
+    match File::open(format!("img/{}/{}", dl_dir, file_name)) {
+        Ok(f)  => { Ok(f) }
+        Err(_) => { Err(404) }
+    }
 }
 
-#[derive(Serialize)]
-struct CounterTemplate {
-    count: usize
-}
-
-#[get("/count")]
-fn count(counter: State<Counter>) -> Template {
-    let prev = counter.count.load(Ordering::Relaxed);
-    counter.count.store(prev + 1, Ordering::Relaxed);
-    let context = CounterTemplate { count: prev + 1 };
-    Template::render("counter", context)
-}
-
-struct Counter {
-    count: AtomicUsize,
-}
 // Main function.
 fn main() {
 
-    rocket::ignite()
-        .mount("/", routes![index, message, count])
-        .attach(Template::fairing())
-        .manage(Counter { count: AtomicUsize::new(0) })
-        .launch();
-
    
-    /*
     let mut clean = false;
 
     println!("Radar Monitor:");
@@ -100,6 +117,14 @@ fn main() {
     let (update_tx, update_rx) = mpsc::channel();
     let (finish_tx, finish_rx) = mpsc::channel();
 
+    // Spawn the webserver thread
+    thread::spawn(move || {
+        rocket::ignite()
+            .mount("/", routes![index, image])
+            .launch();
+    });
+
+
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
@@ -116,5 +141,4 @@ fn main() {
         // Tell the other thread to update the image display
         update_tx.send(()).unwrap();
     }
-    */
 }

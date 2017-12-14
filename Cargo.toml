@@ -15,4 +15,4 @@ serde_derive = "1.0"
 [dependencies.rocket_contrib]
 version = "*"
 default-features = false
-features = ["handlebars_templates"]
+features = ["handlebars_templates", "json"]
