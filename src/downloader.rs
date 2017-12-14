@@ -28,11 +28,9 @@ struct Timecode {
 
 // Connect to the BOM ftp server and download any new files 
 // Saves files for all three zoom levels
-// Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
-// new.
+// Files are saved to the folder DL_DIR/lc_code 
 // Returns Ok(()) if everything was ok. Propogates an error if there is an ftp error
 pub fn save_files() -> ftp::types::Result<()> {
-
 
     // Connect to the server, login, change directory
     let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
@@ -51,9 +49,6 @@ pub fn save_files() -> ftp::types::Result<()> {
         filenames.retain(|e| e.contains(lc_code) && !e.contains(".gif"));
 
         for file_name in filenames {
-            // Prefix filename to designate it as a new file
-            let file_name_x = "x".to_string() + &file_name;
-
             // Check if the file already exists locally.
             // Open will return an error if it does not exist, so err = good.
             // If open succeeds, the file exists and we move to the next file
@@ -69,7 +64,7 @@ pub fn save_files() -> ftp::types::Result<()> {
             let remote_file = ftp_stream.simple_retr(&file_name)?;
 
             // Create a new file locally
-            let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name_x)
+            let mut file = File::create(DL_DIR.to_string() + lc_code + "/" + &file_name)
                 .expect("Error creating file on disk");
 
             // Write the file
@@ -89,7 +84,7 @@ pub fn save_files() -> ftp::types::Result<()> {
     Ok(())
 }
 
-// Wait for 'mins' minutes while printing a report of how long remains.
+// Wait for 'mins' minutes while printing a report of how long remains. (Silenced)
 // Regularly monitors 'terminate' and returns early if it goes true.
 // Returns true if terminated early, otherwise false.
 pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
@@ -98,24 +93,28 @@ pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
     let one_sec = Duration::new(1, 0);
 
     while secs > 0 {
+        /*
         print!("\rWaiting {} seconds...     ", secs);
         std::io::stdout().flush().expect("Error flushing stdout");
+        */
 
         sleep(one_sec);
 
         if terminate.try_recv().is_ok() {
-            println!("");
+            //println!("");
             return true;
         }
 
         secs -= 1;
     }
 
+    /*
     if mins == 1 {
         println!("\rWaited 1 minute.       ");
     } else {
         println!("\rWaited {} minutes.      ", mins);
     }
+    */
 
     false
 }
@@ -133,14 +132,7 @@ pub fn init(){
     init_background(CODE_MID).expect("Initialisation Failure");
     init_background(CODE_HIGH).expect("Initialisation Failure");
 
-    // Any pre-existing files will not be prefixed, and will not be re-downloaded by
-    // save_files(), once that has completed we re-prefix the pre-existing files to be made
-    // into textures by the other thread
     save_files().ok();
-
-    mark_files_as_new(CODE_LOW);
-    mark_files_as_new(CODE_MID);
-    mark_files_as_new(CODE_HIGH);
 }
 
 // Save the radar background for location code 'lc_code' and create the subdirectory for 
@@ -179,35 +171,6 @@ pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
     let _ = ftp_stream.quit();
 
     Ok(())
-}
-
-// For all files in the folder DL_DIR/location_code/ which do not have an 'x' prefix, add that
-// prefix to their filename.
-fn mark_files_as_new(location_code: &str) {
-    // Read the directory and convert to filenames
-    let dir = DL_DIR.to_string() + location_code + "/";
-    let files: Vec<_> = fs::read_dir(&dir)
-        .expect("Error reading directory")
-        .map(|e| {
-            e.expect("Error reading image filename")
-                .file_name()
-                .into_string()
-                .expect("Error extracting image filename")
-        })
-        .collect();
-
-    // Filter out any files which already have the prefix
-    let mut file_names = files.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
-
-    file_names.sort();
-
-    // Prefix each file
-    for file_name in file_names {
-        let new_name = "x".to_string() + file_name;
-        fs::rename(&(dir.to_string() + file_name),
-                   &(dir.to_string() + &new_name))
-            .expect("Error renaming file");
-    }
 }
 
 // Removes non-contiguous files from each image directory
