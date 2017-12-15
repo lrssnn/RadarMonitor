@@ -8,7 +8,6 @@ use std::fs;
 use std::fs::File;
 use std::thread::sleep;
 use std::time::Duration;
-use std::sync::mpsc;
 use ftp::FtpStream;
 
 use super::DL_DIR;
@@ -86,8 +85,7 @@ pub fn save_files() -> ftp::types::Result<()> {
 
 // Wait for 'mins' minutes while printing a report of how long remains. (Silenced)
 // Regularly monitors 'terminate' and returns early if it goes true.
-// Returns true if terminated early, otherwise false.
-pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
+pub fn wait_mins(mins: usize) {
     let mut secs = mins * 60;
 
     let one_sec = Duration::new(1, 0);
@@ -100,11 +98,6 @@ pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
 
         sleep(one_sec);
 
-        if terminate.try_recv().is_ok() {
-            //println!("");
-            return true;
-        }
-
         secs -= 1;
     }
 
@@ -115,8 +108,6 @@ pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
         println!("\rWaited {} minutes.      ", mins);
     }
     */
-
-    false
 }
 
 // Run first time initialisation tasks such as creating directories and priming with images
@@ -266,5 +257,55 @@ fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
         true
     } else {
         next.month == 0 && prev.year + 1 == next.year
+    }
+}
+
+pub fn trim_files(limit: usize) {
+
+    let dirs;
+    match fs::read_dir(DL_DIR) {
+        Ok(d)  => { dirs = d }
+        Err(_) => { return }
+    };
+
+    // Iterate through the subdirectories (zoom levels)
+    for dir in dirs {
+        
+        let files = fs::read_dir(dir.expect("File Error").path()).expect("File Error");
+        let mut deleted = false;
+
+        // Get the path for each file
+        let mut file_names: Vec<_> = files.map(|e| {
+            e.expect("File error")
+                .path()
+        })
+        .collect();
+        file_names.sort();
+
+        for (i, file) in file_names.iter().rev().enumerate() {
+            if i >= limit {
+                deleted = true;
+                print!("\r({:02}) Deleting: \"{}\")", (i+1) - limit, file.to_str().unwrap());
+                fs::remove_file(file).expect("Deletion Error");
+            }
+            /*
+            if i+1 != file_names.len() {
+                // Look ahead 1
+                let file = &file_names[i+1];
+                if del > 0 {
+                    del += 1;
+                    print!("\r({:02}) Deleting: {:?}", del, prev);
+                    fs::remove_file(prev).expect(file_error);
+                } else if !consecutive_files(prev, file) {
+                    del += 1;
+                    print!("\r({:02}) Deleting: {:?}", del, prev);
+                    fs::remove_file(prev).expect(file_error);
+                }
+            }
+            */
+        }
+        if deleted {
+            println!("");
+        }
     }
 }
