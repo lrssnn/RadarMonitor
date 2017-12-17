@@ -13,8 +13,9 @@ let app = new Vue({
         index_s: 0,
         index_m: 0,
         index_f: 0,
-        zoom: 1,
-        images: [["img/IDR042/0.png", "img/IDR042/1.png", "img/IDR042/2.png",
+        zoom: 2,
+        images: [[""],
+          ["img/IDR042/0.png", "img/IDR042/1.png", "img/IDR042/2.png",
             "img/IDR042/3.png", "img/IDR042/4.png", "img/IDR042/5.png",
             "img/IDR042/6.png", "img/IDR042/7.png", "img/IDR042/8.png",
             "img/IDR042/9.png", ],
@@ -79,11 +80,20 @@ let app = new Vue({
             this.zoom = zoom;
         },
         get_listing() {
+          console.log("Get Listing:");
           var request = new XMLHttpRequest();
           var v = this;
           request.onreadystatechange = function() {
             if (request.readyState == 4 && request.status == 200){
+                console.log(JSON.parse(request.responseText))
+
                 v.images = JSON.parse(request.responseText);
+                let refresh = new Date(v.images[0][0] * 1000)
+                console.log("Refresh Time: ", refresh);
+                // Set the listing to refresh at the specified time
+                let delay = (v.images[0][0] * 1000) + 5000 - Date.now();
+                console.log("Refeshing in: ", delay, "ms");
+                window.setTimeout(v.get_listing, delay);
               }
           }
           request.open("GET", "http://localhost:8000/listing", true);

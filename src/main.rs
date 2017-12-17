@@ -10,7 +10,11 @@ use std::env;
 
 use std::fs;
 use std::fs::File;
+use std::io::Write;
+use std::io::Read;
 use std::path::PathBuf;
+
+use std::time;
 
 use rocket_contrib::Json;
 
@@ -35,7 +39,7 @@ fn resource(file: String) -> File {
 
 //Returns a directory listing in the form of nested arrays of strings.
 #[get("/listing")]
-fn listing() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
+fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
 
     let dirs;
     // If DL_DIR doesn't exist, there is nothing to clean
@@ -46,6 +50,8 @@ fn listing() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
 
     // Will contain a Vec for each zoom level that exists
     let mut zooms = vec![];
+
+    zooms.push(vec![format!("{}", load_refresh_time())]);
 
     // Iterate through the subdirectories (zoom levels)
     for dir in dirs {
@@ -65,7 +71,7 @@ fn listing() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
 
         // Iterate through the files
         for filename in file_names.iter() {
-            zoom_array.push(filename.clone());
+            zoom_array.push(filename.clone().to_str().unwrap().repeat(1));
         }
 
         zooms.push(zoom_array);
@@ -139,12 +145,28 @@ fn main() {
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
+        save_refresh_time(5);
         wait_mins(5);
 
         while !save_files().is_ok() {
+            save_refresh_time(1);
             wait_mins(1);
         }
 
         downloader::trim_files(30);
     }
+}
+
+fn save_refresh_time(mins: u64) {
+    let time = time::SystemTime::now() + time::Duration::from_secs(mins * 60);
+    let secs = time.duration_since(time::UNIX_EPOCH).unwrap().as_secs();
+    let mut file = File::create("time.txt").unwrap();
+    file.write_all(format!("{:?}", secs).as_bytes());
+}
+
+fn load_refresh_time() -> u64 {
+    let mut file = File::open("time.txt").unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents);
+    contents.parse().unwrap()
 }
