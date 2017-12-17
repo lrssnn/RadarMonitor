@@ -23,10 +23,20 @@ const CODE_LOW:  &'static str = "IDR042";
 const CODE_MID:  &'static str = "IDR043"; // BOM product code for the desired radar image set
 const CODE_HIGH: &'static str = "IDR044";
 
-// Server index. Returns a directory listing in the form of nested arrays of strings.
 #[get("/")]
-fn index() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
-    
+fn index() -> File {
+    File::open("res/index.html").expect("Index Missing")
+}
+
+#[get("/res/<file>")]
+fn resource(file: String) -> File {
+    File::open(format!("res/{}", file)).expect("Resource Missing")
+}
+
+//Returns a directory listing in the form of nested arrays of strings.
+#[get("/listing")]
+fn listing() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
+
     let dirs;
     // If DL_DIR doesn't exist, there is nothing to clean
     match fs::read_dir(DL_DIR) {
@@ -39,7 +49,7 @@ fn index() -> Result<Json<Vec<Vec<PathBuf>>>, usize> {
 
     // Iterate through the subdirectories (zoom levels)
     for dir in dirs {
-        
+
         // Will contain the filename of each file in this directory
         let mut zoom_array = vec![];
 
@@ -76,7 +86,7 @@ fn image(dl_dir: String, file_name: String) -> Result<File, usize> {
 
 
 fn main() {
-   
+
     let mut clean = false;
 
     // 30 images corresponds to 3 hours
@@ -121,7 +131,7 @@ fn main() {
     // Spawn the webserver thread
     thread::spawn(move || {
         rocket::ignite()
-            .mount("/", routes![index, image])
+            .mount("/", routes![index, image, resource, listing])
             .launch();
     });
 
