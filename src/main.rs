@@ -12,7 +12,6 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::io::Read;
-use std::path::PathBuf;
 
 use std::time;
 
@@ -22,32 +21,36 @@ mod downloader;
 use downloader::{save_files, init, wait_mins};
 
 // Configuration constants
-const DL_DIR:    &'static str = "img/"; // Folder to keep images in.
-const CODE_LOW:  &'static str = "IDR042";
-const CODE_MID:  &'static str = "IDR043"; // BOM product code for the desired radar image set
-const CODE_HIGH: &'static str = "IDR044";
+const DL_DIR:    &str = "img/"; // Folder to keep images in.
+const CODE_LOW:  &str = "IDR042";
+const CODE_MID:  &str = "IDR043"; // BOM product code for the desired radar image set
+const CODE_HIGH: &str = "IDR044";
 
+// Index: Serve the html file which displays the images
 #[get("/")]
 fn index() -> File {
     File::open("res/index.html").expect("Index Missing")
 }
 
+// Resources: Provide the javascript and css required by the html file
 #[get("/res/<file>")]
 fn resource(file: String) -> File {
     File::open(format!("res/{}", file)).expect("Resource Missing")
 }
 
+// Backgrounds: Provide the unchanging background and location image layers
 #[get("/img/<file>")]
 fn backgrounds(file: String) -> File {
     File::open(format!("img/{}", file)).expect("Background Missing")
 }
 
-//Returns a directory listing in the form of nested arrays of strings.
+// Listing: Returns a directory listing in the form of nested arrays of strings.
+// Note that the first array is one element long, the Unix timestamp of the next time the
+// server will be checking for new files on the BOM server
 #[get("/listing")]
 fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
 
     let dirs;
-    // If DL_DIR doesn't exist, there is nothing to clean
     match fs::read_dir(DL_DIR) {
         Ok(d)  => { dirs = d }
         Err(_) => { return Err(500) }
@@ -56,6 +59,7 @@ fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
     // Will contain a Vec for each zoom level that exists
     let mut zooms = vec![];
 
+    // Insert the timestamp first
     zooms.push(vec![format!("{}", load_refresh_time())]);
 
     // Iterate through the subdirectories (zoom levels)
@@ -109,8 +113,8 @@ fn main() {
     let mut image_keep_limit = 30;
 
     println!("Radar Monitor:");
-    // Check the program args
 
+    // Check the program args
     let mut used = false; // Indicator that the last argument was used
     let args: Vec<String> = env::args().skip(1).collect();
     for (i, arg) in args.iter().enumerate() {
@@ -167,6 +171,8 @@ fn main() {
     }
 }
 
+// Save the unix timestamp of the next time the server will check with the BOM server
+// in 'time.txt'
 fn save_refresh_time(mins: u64) {
     let time = time::SystemTime::now() + time::Duration::from_secs(mins * 60);
     let secs = time.duration_since(time::UNIX_EPOCH).unwrap().as_secs();
@@ -174,6 +180,7 @@ fn save_refresh_time(mins: u64) {
     file.write_all(format!("{:?}", secs).as_bytes());
 }
 
+// Load the unix timestamp stored in time.txt
 fn load_refresh_time() -> u64 {
     let mut file = File::open("time.txt").unwrap();
     let mut contents = String::new();

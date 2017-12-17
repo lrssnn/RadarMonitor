@@ -3,17 +3,22 @@ window.Vue = Vue;
 let app = new Vue({
     el: '#app',
     data: {
-        msg: 'Working',
         slow: false,
         med: true,
         fast: false,
-        bg: ["", "img/IDR042.background.png","img/IDR043.background.png", "img/IDR044.background.png"],
-        lc: ["", "img/IDR042.locations.png","img/IDR043.locations.png", "img/IDR044.locations.png"],
         img: "img/IDR044/0.png",
         index_s: 0,
         index_m: 0,
         index_f: 0,
         zoom: 2,
+        bg: ["", 
+            "img/IDR042.background.png",
+            "img/IDR043.background.png", 
+            "img/IDR044.background.png"],
+        lc: ["", 
+            "img/IDR042.locations.png",
+            "img/IDR043.locations.png", 
+            "img/IDR044.locations.png"],
         images: [[""],
           ["img/IDR042/0.png", "img/IDR042/1.png", "img/IDR042/2.png",
             "img/IDR042/3.png", "img/IDR042/4.png", "img/IDR042/5.png",
@@ -30,6 +35,7 @@ let app = new Vue({
 
     },
     computed: {
+        // Return whichever index is active
         index: function() {
             if (this.slow) {
                 return this.index_s;
@@ -41,9 +47,7 @@ let app = new Vue({
         }
     },
     methods: {
-        doSomething(){
-            console.log("Good job");
-        },
+        // Each 'set' method ensures that only the desired speed is active
         set_slow() {
             // Synchronise index to prevent jumps
             if (this.med) {
@@ -79,27 +83,35 @@ let app = new Vue({
         set_zoom(zoom) {
             this.zoom = zoom;
         },
+        // Contact the server for a fresh image listing. Automatically reschedules itself
+        // to call again based on the time supplied in the listing.
         get_listing() {
-          console.log("Get Listing:");
+          // Create the request object
           var request = new XMLHttpRequest();
+          // Required as 'this' is aliased in the callback
           var v = this;
+          // This callback is called after the response is received
           request.onreadystatechange = function() {
+            // Only execute once the request has successfully returned
             if (request.readyState == 4 && request.status == 200){
-                console.log(JSON.parse(request.responseText))
-
+                // Set the Vue property to the new array
                 v.images = JSON.parse(request.responseText);
-                let refresh = new Date(v.images[0][0] * 1000)
-                console.log("Refresh Time: ", refresh);
                 // Set the listing to refresh at the specified time
+                // (v.images[0][0] is the number of seconds since the Unix epoch at the
+                //   time that the next refresh will happen. Convert to millis, add 5
+                //   seconds and subtract Date.now() to get the number of millis until
+                //   that moment plus 5 secs to ensure server refresh is complete)
                 let delay = (v.images[0][0] * 1000) + 5000 - Date.now();
-                console.log("Refeshing in: ", delay, "ms");
                 window.setTimeout(v.get_listing, delay);
               }
           }
+          // Send the request
           request.open("GET", "http://localhost:8000/listing", true);
           request.send(null);
         }
     },
+    // When the vue instance is created, set the interval functions which drive the
+    // indices, and get initialise the images from the server.
     created: function() {
         window.setInterval(() => {
             this.index_s = (this.index_s + 1) % 30;
