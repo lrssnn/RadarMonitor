@@ -150,8 +150,8 @@ pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
     let location_file = ftp_stream.simple_retr(location_file_name)?;
 
     // Create a new file locally (overwriting if already exists)
-    let mut bg_file = File::create(background_file_name).expect("Error creating file on disk");
-    let mut lc_file = File::create(location_file_name).expect("Error creating file on disk");
+    let mut bg_file = File::create(DL_DIR.to_string() + background_file_name).expect("Error creating file on disk");
+    let mut lc_file = File::create(DL_DIR.to_string() + location_file_name).expect("Error creating file on disk");
 
     // Write the files
     bg_file.write_all(background_file.into_inner().as_slice())

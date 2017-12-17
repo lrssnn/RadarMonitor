@@ -37,6 +37,11 @@ fn resource(file: String) -> File {
     File::open(format!("res/{}", file)).expect("Resource Missing")
 }
 
+#[get("/img/<file>")]
+fn backgrounds(file: String) -> File {
+    File::open(format!("img/{}", file)).expect("Background Missing")
+}
+
 //Returns a directory listing in the form of nested arrays of strings.
 #[get("/listing")]
 fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
@@ -55,26 +60,31 @@ fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
 
     // Iterate through the subdirectories (zoom levels)
     for dir in dirs {
+        if let Ok(dir) = dir {
+            if !dir.file_type().unwrap().is_dir() {
+                continue;
+            }
 
-        // Will contain the filename of each file in this directory
-        let mut zoom_array = vec![];
+            // Will contain the filename of each file in this directory
+            let mut zoom_array = vec![];
 
-        let files = fs::read_dir(dir.expect("File Error").path()).expect("File Error");
+            let files = fs::read_dir(dir.path()).expect("File Error");
 
-        // Get the path for each file
-        let mut file_names: Vec<_> = files.map(|e| {
-            e.expect("File error")
-                .path()
-        })
-        .collect();
-        file_names.sort();
+            // Get the path for each file
+            let mut file_names: Vec<_> = files.map(|e| {
+                e.expect("File error")
+                    .path()
+            })
+            .collect();
+            file_names.sort();
 
-        // Iterate through the files
-        for filename in file_names.iter() {
-            zoom_array.push(filename.clone().to_str().unwrap().repeat(1));
+            // Iterate through the files
+            for filename in file_names.iter() {
+                zoom_array.push(filename.clone().to_str().unwrap().repeat(1));
+            }
+
+            zooms.push(zoom_array);
         }
-
-        zooms.push(zoom_array);
     }
     // Respond to the request with a Json serialisation of the array
     Ok(Json(zooms))
@@ -137,7 +147,7 @@ fn main() {
     // Spawn the webserver thread
     thread::spawn(move || {
         rocket::ignite()
-            .mount("/", routes![index, image, resource, listing])
+            .mount("/", routes![index, image, resource, listing, backgrounds])
             .launch();
     });
 
