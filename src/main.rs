@@ -82,6 +82,11 @@ fn listing() -> Result<Json<Vec<Vec<String>>>, usize> {
             .collect();
             file_names.sort();
 
+            // Put in a length hint in case the server just started
+            if zooms[0].len() == 1 {
+                zooms[0].push(format!("{}", file_names.len()));
+            }
+
             // Iterate through the files
             for filename in file_names.iter() {
                 zoom_array.push(filename.clone().to_str().unwrap().repeat(1));

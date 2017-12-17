@@ -269,42 +269,33 @@ pub fn trim_files(limit: usize) {
     };
 
     // Iterate through the subdirectories (zoom levels)
+    let mut deleted = 0;
     for dir in dirs {
         
-        let files = fs::read_dir(dir.expect("File Error").path()).expect("File Error");
-        let mut deleted = false;
-
-        // Get the path for each file
-        let mut file_names: Vec<_> = files.map(|e| {
-            e.expect("File error")
-                .path()
-        })
-        .collect();
-        file_names.sort();
-
-        for (i, file) in file_names.iter().rev().enumerate() {
-            if i >= limit {
-                deleted = true;
-                print!("\r({:02}) Deleting: \"{}\")", (i+1) - limit, file.to_str().unwrap());
-                fs::remove_file(file).expect("Deletion Error");
+        if let Ok(dir) = dir {
+            if !dir.file_type().unwrap().is_dir() {
+                continue;
             }
-            /*
-            if i+1 != file_names.len() {
-                // Look ahead 1
-                let file = &file_names[i+1];
-                if del > 0 {
-                    del += 1;
-                    print!("\r({:02}) Deleting: {:?}", del, prev);
-                    fs::remove_file(prev).expect(file_error);
-                } else if !consecutive_files(prev, file) {
-                    del += 1;
-                    print!("\r({:02}) Deleting: {:?}", del, prev);
-                    fs::remove_file(prev).expect(file_error);
+
+            let files = fs::read_dir(dir.path()).expect("File Error");
+
+            // Get the path for each file
+            let mut file_names: Vec<_> = files.map(|e| {
+                e.expect("File error")
+                    .path()
+            })
+            .collect();
+            file_names.sort();
+
+            for (i, file) in file_names.iter().rev().enumerate() {
+                if i >= limit {
+                    deleted += 1;
+                    print!("\r({:02}) Deleting: \"{}\")", deleted, file.to_str().unwrap());
+                    fs::remove_file(file).expect("Deletion Error");
                 }
             }
-            */
         }
-        if deleted {
+        if deleted > 0{
             println!("");
         }
     }

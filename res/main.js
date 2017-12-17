@@ -10,6 +10,7 @@ let app = new Vue({
         index_s: 0,
         index_m: 0,
         index_f: 0,
+	length: 0,
         zoom: 2,
         bg: ["", 
             "img/IDR042.background.png",
@@ -37,16 +38,23 @@ let app = new Vue({
     computed: {
         // Return whichever index is active
         index: function() {
+	    let index;
             if (this.slow) {
-                return this.index_s;
+                index = this.index_s;
             } else if (this.med) {
-                return this.index_m;
+                index = this.index_m;
             } else {
-                return this.index_f;
+                index = this.index_f;
             }
-        }
+	    return index;
+        },
     },
     methods: {
+	image_x: function() {
+            // This represents the width property on the images
+	    // in order to centre the image.
+	    return ('left:' + (window.innerWidth/2 - 256) + 'px');
+	},
         // Each 'set' method ensures that only the desired speed is active
         set_slow() {
             // Synchronise index to prevent jumps
@@ -103,6 +111,9 @@ let app = new Vue({
                 //   that moment plus 5 secs to ensure server refresh is complete)
                 let delay = (v.images[0][0] * 1000) + 5000 - Date.now();
                 window.setTimeout(v.get_listing, delay);
+
+		// Pull out the length of the array
+	        v.length = v.images[0][1];
               }
           }
           // Send the request
@@ -114,15 +125,15 @@ let app = new Vue({
     // indices, and get initialise the images from the server.
     created: function() {
         window.setInterval(() => {
-            this.index_s = (this.index_s + 1) % 30;
+            this.index_s = (this.index_s + 1) % this.length;
         }, 500);
 
         window.setInterval(() => {
-            this.index_m = (this.index_m + 1) % 30;
+            this.index_m = (this.index_m + 1) % this.length;
         }, 200);
 
         window.setInterval(() => {
-            this.index_f = (this.index_f + 1) % 30;
+            this.index_f = (this.index_f + 1) % this.length;
         }, 80);
 
         this.get_listing();

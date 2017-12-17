@@ -7,23 +7,24 @@
 </head>
 <body>
     <div id="app">
-        <h1>Normal</h1>
-        <button v-on:click="get_listing()">test</button>
+        <h1>Newcastle Radar</h1>
         <div>
+	    <label>Zoom:</label>
             <button v-on:click="set_zoom(1)">Far</button>
             <button v-on:click="set_zoom(2)">Med</button>
             <button v-on:click="set_zoom(3)">Close</button>
         </div>
         <div>
+	    <label>Speed:</label>
             <button v-on:click="set_slow()">slow</button>
             <button v-on:click="set_med()">med</button>
             <button v-on:click="set_fast()">fast</button>
         </div>
 
         <div>
-            <img v-bind:src="bg[zoom]">
-            <img v-bind:src="lc[zoom]">
-            <img v-bind:src="images[zoom][index]">
+		<img v-bind:src="bg[zoom]" v-bind:style="image_x()">
+            <img v-bind:src="lc[zoom]" v-bind:style="image_x()">
+            <img v-bind:src="images[zoom][index]" v-bind:style="image_x()">
         </div>
 
     </div>
