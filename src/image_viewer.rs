@@ -94,7 +94,6 @@ pub fn open_window(finish: &mpsc::Sender<()>,
                 (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
                 let mut done = false;
                 events_loop.poll_events(|ev| {
-                    use self::Key::*;
                     // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
                     if let WindowEvent { event: e, .. } = ev {
                         match e {
@@ -109,24 +108,24 @@ pub fn open_window(finish: &mpsc::Sender<()>,
                                 ..
                             } => {
                                 match key {
-                                    Escape   => done = true,
-                                    PageDown => frame_time = change_speed(frame_time, false),
-                                    PageUp   => frame_time = change_speed(frame_time, true),
-                                    LBracket | End => {
+                                    Key::Escape   => done = true,
+                                    Key::PageDown => frame_time = change_speed(frame_time, false),
+                                    Key::PageUp   => frame_time = change_speed(frame_time, true),
+                                    Key::LBracket | Key::End => {
                                         zoom = change_zoom(zoom, false);
                                         force_redraw = true;
                                         if textures[zoom].len() <= index {
                                             index = 0;
                                         };
                                     },
-                                    RBracket | Home => {
+                                    Key::RBracket | Key::Home => {
                                         zoom = change_zoom(zoom, true);
                                         force_redraw = true;
                                         if textures[zoom].len() <= index {
                                             index = 0;
                                         }
                                     },
-                                    Backspace => sleep = true,
+                                    Key::Back => sleep = true,
                                     _ => (),
                                 }
                             }
