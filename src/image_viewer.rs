@@ -6,11 +6,12 @@ use glium::texture::{Texture2d, RawImage2d};
 use glium::DrawError;
 use glium::draw_parameters::{DrawParameters, Blend};
 
-use glium::glutin::Event::WindowEvent;
-use glium::glutin::KeyboardInput;
-use glium::glutin::WindowEvent as Event;
-use glium::glutin::VirtualKeyCode as Key;
-use glium::glutin::ElementState;
+use glium::glutin::event_loop::EventLoop;
+use glium::glutin::event_loop::ControlFlow;
+use glium::glutin::event::WindowEvent;
+use glium::glutin::event::KeyboardInput;
+use glium::glutin::event::VirtualKeyCode as Key;
+use glium::glutin::event::ElementState;
 
 use glium::uniforms::{UniformsStorage, EmptyUniforms};
 
@@ -50,9 +51,7 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &mpsc::Sender<()>, 
-                   update: &mpsc::Receiver<()>)
-                   -> Result<(), DrawError> {
+pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) -> Result<(), DrawError> {
     let mut index      = 0;
     let mut zoom       = 1;
     let mut last_frame = Instant::now();
@@ -68,131 +67,76 @@ pub fn open_window(finish: &mpsc::Sender<()>,
 
     let params = DrawParameters { blend: Blend::alpha_blending(), ..Default::default() };
 
-    loop {
-        if !sleep {
-            // Grab the display and clear it
-            let mut target = display.draw();
-            target.clear_color(0.0, 0.0, 0.0, 0.0);
-            
-            // Draw the background, then map overlay, then radar data
-            target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params)?;
-            target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params)?;
-            target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params)?;
-
-            target.finish().expect("Frame Finishing Error");
-
-
-            // Wait until the frame time has elapsed
-            // 20 millisecond increments are ugly but reduce processor usage a lot and
-            // don't seem to effect visual framerate
-            // This is so ugly
-            // Clearly I don't understand closures because I was not expecting these side effects
-            // (speed and zoom) to actually make it out of the closure????
-            let frame_time_nanos = (frame_time * 1000000) as u32;
-            let mut force_redraw = false;
-            while !force_redraw && 
-                (Instant::now() - last_frame).subsec_nanos() <= frame_time_nanos {
-                let mut done = false;
-                events_loop.poll_events(|ev| {
-                    // Unwrap into a WindowEvent because we don't care about any DeviceEnvents
-                    if let WindowEvent { event: e, .. } = ev {
-                        match e {
-                            Event::Closed => done = true,
-
-                            Event::KeyboardInput {
-                                input: KeyboardInput {
-                                    state: ElementState::Released,
-                                    virtual_keycode: Some(key),
-                                    ..
-                                },
-                                ..
-                            } => {
-                                match key {
-                                    Key::Escape   => done = true,
-                                    Key::PageDown => frame_time = change_speed(frame_time, false),
-                                    Key::PageUp   => frame_time = change_speed(frame_time, true),
-                                    Key::LBracket | Key::End => {
-                                        zoom = change_zoom(zoom, false);
-                                        force_redraw = true;
-                                        if textures[zoom].len() <= index {
-                                            index = 0;
-                                        };
-                                    },
-                                    Key::RBracket | Key::Home => {
-                                        zoom = change_zoom(zoom, true);
-                                        force_redraw = true;
-                                        if textures[zoom].len() <= index {
-                                            index = 0;
-                                        }
-                                    },
-                                    Key::Back => sleep = true,
-                                    _ => (),
-                                }
-                            }
-                            _ => (),
-                        }
-                    }
-                });
-
-                if done {
-                    exit(finish);
-                    return Ok(());
-                }
-                thread::sleep(Duration::from_millis(20));
-            }
-
-            // Next image (with wraparound)
-            index = {
-                if index + 1 < textures[zoom].len() {
-                    index + 1
-                } else {
-                    0
-                }
-            };
-
-            last_frame = Instant::now();
-
-            // Check for new images if we just wrapped around
-            if index == 0 && update.try_recv().is_ok() {
-                add_all_new_textures(&display, &mut textures);
-            }
+    events_loop.run(move |ev, _, control_flow| {
+        // Grab the display and clear it
+        let mut target = display.draw();
+        target.clear_color(0.0, 0.0, 0.0, 0.0);
         
-        } else {
-            // We are asleep, just check for close or unsleep, and delay for a long time
-            let mut done = false;
-            events_loop.poll_events(|ev| {
-                use self::Key::*;
-                if let WindowEvent { event: e, .. } = ev {
-                    match e {
-                        Event::Closed => done = true,
+        // Draw the background, then map overlay, then radar data
+        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params);
+        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params);
+        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params);
 
-                        Event::KeyboardInput {
-                            input: KeyboardInput {
-                                state: ElementState::Released,
-                                virtual_keycode: Some(key),
-                                ..
-                            },
-                            ..
-                        } => {
-                            match key {
-                                Escape => done  = true,
-                                Enter  => sleep = false,
-                                _ => (),
+        target.finish().expect("Frame Finishing Error");
+
+        let frame_time_nano = (frame_time * 1000000) as u64;
+        let next_frame_time = std::time::Instant::now() + std::time::Duration::from_nanos(frame_time_nano);
+        
+        // Next image (with wraparound)
+        index = {
+            if index + 1 < textures[zoom].len() {
+                index + 1
+            } else {
+                0
+            }
+        };
+
+        last_frame = Instant::now();
+
+        // Check for new images if we just wrapped around
+        if index == 0 && update.try_recv().is_ok() {
+            add_all_new_textures(&display, &mut textures);
+        }
+
+        match ev {
+            glium::glutin::event::Event::WindowEvent { event, .. } => match event {
+
+                WindowEvent::CloseRequested => {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                },
+
+                WindowEvent::KeyboardInput {
+                    input: KeyboardInput {
+                        state: ElementState::Released,
+                        virtual_keycode: Some(key),
+                        ..
+                    },
+                    ..
+                } => {
+                    match key {
+                        Key::PageDown => frame_time = change_speed(frame_time, false),
+                        Key::PageUp   => frame_time = change_speed(frame_time, true),
+                        Key::LBracket | Key::End => {
+                            zoom = change_zoom(zoom, false);
+                            if textures[zoom].len() <= index {
+                                index = 0;
+                            };
+                        },
+                        Key::RBracket | Key::Home => {
+                            zoom = change_zoom(zoom, true);
+                            if textures[zoom].len() <= index {
+                                index = 0;
                             }
-                        }
+                        },
+                        Key::Back => sleep = true,
                         _ => (),
                     }
                 }
-            });
-
-            if done {
-                exit(finish);
-                return Ok(());
+                _ => (),
             }
-            thread::sleep(Duration::from_millis(1000));
         }
-    }
-
+    })
 }
 
 // Just a wrapper to be more readable at the draw call. 
@@ -203,11 +147,11 @@ fn uniform_tex(tex: &Texture2d) -> UniformsStorage<&Texture2d, EmptyUniforms> {
 }
 
 // Open a window and return the display and the associated events loop
-fn create_display() -> (glium::Display, glium::glutin::EventsLoop) {
-    let events_loop = glium::glutin::EventsLoop::new();
+fn create_display() -> (glium::Display, EventLoop<()>) {
+    let events_loop = EventLoop::new();
 
-    let window = glium::glutin::WindowBuilder::new()
-        .with_dimensions(512, 512)
+    let window = glium::glutin::window::WindowBuilder::new()
+        .with_inner_size(glium::glutin::dpi::PhysicalSize::new(512, 512))
         .with_title("Radar Monitor");
 
     let context = glium::glutin::ContextBuilder::new();
@@ -345,7 +289,7 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
 
 
 fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
-    let image = image::open(img).expect("Error opening image file").to_rgba();
+    let image = image::open(img).expect("Error opening image file").to_rgba8();
 
     let image_dim = image.dimensions();
 
