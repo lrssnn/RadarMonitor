@@ -26,6 +26,22 @@ struct Timecode {
     min: usize
 }
 
+pub fn run_loop(finish: &mpsc::Receiver<()>) -> Result<(), ()> {
+    loop {
+        // Wait for 5 minutes, then check the server every minute until we get at least
+        // 1 new file
+        if wait_mins(5, &finish) {
+            return Ok(());
+        }
+
+        while !save_files().is_ok() {
+            if wait_mins(1, &finish) {
+                return Ok(());
+            }
+        }
+    }
+}
+
 // Connect to the BOM ftp server and download any new files 
 // Saves files for all three zoom levels
 // Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as

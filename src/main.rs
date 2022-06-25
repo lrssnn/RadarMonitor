@@ -49,22 +49,12 @@ fn main() {
     // Create our channels
     let (finish_tx, finish_rx) = mpsc::channel();
 
-    // Start the thread which displays the window
+    // Start the thread which downloads the files
     thread::spawn(move || {
-        image_viewer::open_window(&finish_tx).expect("Drawing Error"); 
+        downloader::run_loop(&finish_rx).expect("Downloading Error");
     });
 
-    loop {
-        // Wait for 5 minutes, then check the server every minute until we get at least
-        // 1 new file
-        if wait_mins(5, &finish_rx) {
-            return;
-        }
+    // Open the window. This has to happen on the main thread for reasons
+    image_viewer::open_window().expect("Drawing Error"); 
 
-        while !save_files().is_ok() {
-            if wait_mins(1, &finish_rx) {
-                return;
-            }
-        }
-    }
 }

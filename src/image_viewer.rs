@@ -17,8 +17,6 @@ use glium::uniforms::{UniformsStorage, EmptyUniforms};
 
 use std::str;
 use std::fs;
-use std::thread;
-use std::time::{Instant, Duration};
 use std::iter::Iterator;
 use std::sync::mpsc;
 
@@ -51,15 +49,13 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
+pub fn open_window() -> Result<(), DrawError> {
     let mut index      = 0;
     let mut zoom       = 1;
-    let mut last_frame = Instant::now();
     let mut frame_time = SPEED_MID;
-    let mut sleep      = false;
 
     // Do a bunch of init garbage
-    let (display, mut events_loop) = create_display();
+    let (display, events_loop) = create_display();
     let (bg_textures, lc_textures) = background_init(&display);
     let program      = link_shader(&display);
     let (vb, ib)     = create_buffers(&display);
@@ -73,14 +69,18 @@ pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
         target.clear_color(0.0, 0.0, 0.0, 0.0);
         
         // Draw the background, then map overlay, then radar data
-        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params);
-        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params);
-        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params);
+        target.draw(&vb, &ib, &program, &uniform_tex(&bg_textures[zoom]), &params).expect("Error drawing BG");
+        target.draw(&vb, &ib, &program, &uniform_tex(&lc_textures[zoom]), &params).expect("Error drawing Overlay");
+        target.draw(&vb, &ib, &program, &uniform_tex(&textures[zoom][index]), &params).expect("Error drawing data");
 
         target.finish().expect("Frame Finishing Error");
 
         let frame_time_nano = (frame_time * 1000000) as u64;
+        println!("{} millis per frame = {} nanos per frame...", frame_time, frame_time_nano);
+
         let next_frame_time = std::time::Instant::now() + std::time::Duration::from_nanos(frame_time_nano);
+        println!("next frame at {:?}", next_frame_time);
+        *control_flow = ControlFlow::WaitUntil(next_frame_time);
         
         // Next image (with wraparound)
         index = {
@@ -90,8 +90,6 @@ pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
                 0
             }
         };
-
-        last_frame = Instant::now();
 
         // Check for new images if we just wrapped around
         if index == 0 {
@@ -103,7 +101,6 @@ pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
 
                 WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
-                    return;
                 },
 
                 WindowEvent::KeyboardInput {
@@ -115,8 +112,8 @@ pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
                     ..
                 } => {
                     match key {
-                        Key::PageDown => frame_time = change_speed(frame_time, false),
-                        Key::PageUp   => frame_time = change_speed(frame_time, true),
+                        Key::Down => frame_time = change_speed(frame_time, false),
+                        Key::Up   => frame_time = change_speed(frame_time, true),
                         Key::LBracket | Key::End => {
                             zoom = change_zoom(zoom, false);
                             if textures[zoom].len() <= index {
@@ -129,7 +126,7 @@ pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
                                 index = 0;
                             }
                         },
-                        Key::Back => sleep = true,
+                        Key::Escape => *control_flow = ControlFlow::Exit,
                         _ => (),
                     }
                 }
@@ -198,7 +195,7 @@ fn change_zoom(zoom: usize, faster: bool) -> usize {
 }
 
 fn change_speed(current: usize, increase: bool) -> usize {
-    if increase {
+    let value = if increase {
         if current == SPEED_SLOW {
             SPEED_MID
         } else {
@@ -208,7 +205,9 @@ fn change_speed(current: usize, increase: bool) -> usize {
         SPEED_MID
     } else {
         SPEED_SLOW
-    }
+    };
+    println!("Frame Time = {}", value);
+    value
 }
 
 // Create background and location texture arrays. Just to clean up init in main function
@@ -297,6 +296,5 @@ fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
     let image = RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dim);
 
     Texture2d::new(display, image).expect("Error creating texture from image")
-
 }
 
