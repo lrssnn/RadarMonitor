@@ -47,13 +47,11 @@ fn main() {
     }
 
     // Create our channels
-    let (update_tx, update_rx) = mpsc::channel();
     let (finish_tx, finish_rx) = mpsc::channel();
-
 
     // Start the thread which displays the window
     thread::spawn(move || {
-        image_viewer::open_window(&finish_tx, &update_rx).expect("Drawing Error"); 
+        image_viewer::open_window(&finish_tx).expect("Drawing Error"); 
     });
 
     loop {
@@ -68,8 +66,5 @@ fn main() {
                 return;
             }
         }
-
-        // Tell the other thread to update the image display
-        update_tx.send(()).unwrap();
     }
 }

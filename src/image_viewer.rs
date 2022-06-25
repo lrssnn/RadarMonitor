@@ -51,7 +51,7 @@ const VERTICES: [Vertex; 4] = [
 const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) -> Result<(), DrawError> {
+pub fn open_window(finish: &mpsc::Sender<()>) -> Result<(), DrawError> {
     let mut index      = 0;
     let mut zoom       = 1;
     let mut last_frame = Instant::now();
@@ -94,7 +94,7 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) -> Re
         last_frame = Instant::now();
 
         // Check for new images if we just wrapped around
-        if index == 0 && update.try_recv().is_ok() {
+        if index == 0 {
             add_all_new_textures(&display, &mut textures);
         }
 
@@ -134,7 +134,8 @@ pub fn open_window(finish: &mpsc::Sender<()>, update: &mpsc::Receiver<()>) -> Re
                     }
                 }
                 _ => (),
-            }
+            },
+            _ => (),
         }
     })
 }
