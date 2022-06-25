@@ -8,7 +8,6 @@ use std::fs;
 use std::fs::File;
 use std::thread::sleep;
 use std::time::Duration;
-use std::sync::mpsc;
 use ftp::FtpStream;
 
 use super::DL_DIR;
@@ -26,18 +25,14 @@ struct Timecode {
     min: usize
 }
 
-pub fn run_loop(finish: &mpsc::Receiver<()>) -> Result<(), ()> {
+pub fn run_loop() -> Result<(), ()> {
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
-        if wait_mins(5, &finish) {
-            return Ok(());
-        }
+        wait_mins(5);
 
-        while !save_files().is_ok() {
-            if wait_mins(1, &finish) {
-                return Ok(());
-            }
+        while save_files().is_err() {
+            wait_mins(1)
         }
     }
 }
@@ -96,7 +91,7 @@ pub fn save_files() -> ftp::types::Result<()> {
         }
 
         if downloads > 0 {
-            println!("");
+            println!();
         }
     }
 
@@ -106,9 +101,7 @@ pub fn save_files() -> ftp::types::Result<()> {
 }
 
 // Wait for 'mins' minutes while printing a report of how long remains.
-// Regularly monitors 'terminate' and returns early if it goes true.
-// Returns true if terminated early, otherwise false.
-pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
+pub fn wait_mins(mins: usize) {
     let mut secs = mins * 60;
 
     let one_sec = Duration::new(1, 0);
@@ -119,11 +112,6 @@ pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
 
         sleep(one_sec);
 
-        if terminate.try_recv().is_ok() {
-            println!("");
-            return true;
-        }
-
         secs -= 1;
     }
 
@@ -132,8 +120,6 @@ pub fn wait_mins(mins: usize, terminate: &mpsc::Receiver<()>) -> bool {
     } else {
         println!("\rWaited {} minutes.      ", mins);
     }
-
-    false
 }
 
 // Run first time initialisation tasks such as creating directories and priming with images
@@ -270,7 +256,7 @@ pub fn clean() {
             }
         }
         if del > 0 {
-            println!("");
+            println!();
         }
     }
 }

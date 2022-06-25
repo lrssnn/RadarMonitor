@@ -18,7 +18,6 @@ use glium::uniforms::{UniformsStorage, EmptyUniforms};
 use std::str;
 use std::fs;
 use std::iter::Iterator;
-use std::sync::mpsc;
 
 use super::SPEED_SLOW;
 use super::SPEED_MID;
@@ -96,44 +95,40 @@ pub fn open_window() -> Result<(), DrawError> {
             add_all_new_textures(&display, &mut textures);
         }
 
-        match ev {
-            glium::glutin::event::Event::WindowEvent { event, .. } => match event {
-
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                },
-
-                WindowEvent::KeyboardInput {
-                    input: KeyboardInput {
-                        state: ElementState::Released,
-                        virtual_keycode: Some(key),
-                        ..
-                    },
-                    ..
-                } => {
-                    match key {
-                        Key::Down => frame_time = change_speed(frame_time, false),
-                        Key::Up   => frame_time = change_speed(frame_time, true),
-                        Key::LBracket | Key::End => {
-                            zoom = change_zoom(zoom, false);
-                            if textures[zoom].len() <= index {
-                                index = 0;
-                            };
-                        },
-                        Key::RBracket | Key::Home => {
-                            zoom = change_zoom(zoom, true);
-                            if textures[zoom].len() <= index {
-                                index = 0;
-                            }
-                        },
-                        Key::Escape => *control_flow = ControlFlow::Exit,
-                        _ => (),
-                    }
-                }
-                _ => (),
+        if let glium::glutin::event::Event::WindowEvent {event, .. } = ev { match event {
+            WindowEvent::CloseRequested => {
+                *control_flow = ControlFlow::Exit;
             },
+
+            WindowEvent::KeyboardInput {
+                input: KeyboardInput {
+                    state: ElementState::Released,
+                    virtual_keycode: Some(key),
+                    ..
+                },
+                ..
+            } => {
+                match key {
+                    Key::Down => frame_time = change_speed(frame_time, false),
+                    Key::Up   => frame_time = change_speed(frame_time, true),
+                    Key::LBracket | Key::End => {
+                        zoom = change_zoom(zoom, false);
+                        if textures[zoom].len() <= index {
+                            index = 0;
+                        };
+                    },
+                    Key::RBracket | Key::Home => {
+                        zoom = change_zoom(zoom, true);
+                        if textures[zoom].len() <= index {
+                            index = 0;
+                        }
+                    },
+                    Key::Escape => *control_flow = ControlFlow::Exit,
+                    _ => (),
+                }
+            }
             _ => (),
-        }
+        }}
     })
 }
 
@@ -161,8 +156,8 @@ fn create_display() -> (glium::Display, EventLoop<()>) {
 }
 
 fn link_shader(display: &glium::Display) -> glium::Program {
-    const VERT_SHADER: &'static str = include_str!("res/shader.vert");
-    const FRAG_SHADER: &'static str = include_str!("res/shader.frag");
+    const VERT_SHADER: &str = include_str!("res/shader.vert");
+    const FRAG_SHADER: &str = include_str!("res/shader.frag");
     glium::Program::from_source(display, VERT_SHADER, FRAG_SHADER, None)
         .expect("Error creating shader program")
 }
@@ -174,10 +169,6 @@ fn create_buffers(display: &glium::Display) -> (VertexBuffer<Vertex>, IndexBuffe
         .expect("Error creating index buffer");
 
     (vb, ib)
-}
-
-fn exit(terminate: &mpsc::Sender<()>) {
-    terminate.send(()).unwrap();
 }
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {

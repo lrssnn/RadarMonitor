@@ -2,21 +2,17 @@
 extern crate glium;
 extern crate ftp;
 
-use std::thread;
-use std::sync::mpsc;
-
 use std::env;
+use std::thread;
 
 mod image_viewer;
-
 mod downloader;
-use downloader::{save_files, init, wait_mins};
 
 // Configuration constants
-const DL_DIR:    &'static str = "img/"; // Folder to keep images in.
-const CODE_LOW:  &'static str = "IDR042";
-const CODE_MID:  &'static str = "IDR043"; // BOM product code for the desired radar image set
-const CODE_HIGH: &'static str = "IDR044";
+const DL_DIR:    &str = "img/"; // Folder to keep images in.
+const CODE_LOW:  &str = "IDR042";
+const CODE_MID:  &str = "IDR043"; // BOM product code for the desired radar image set
+const CODE_HIGH: &str = "IDR044";
 
 // Milliseconds per frame
 const SPEED_SLOW: usize = 200;
@@ -39,19 +35,16 @@ fn main() {
         }
     }
 
-    init();
+    downloader::init();
 
     if clean {
         println!("Cleaning images directory");
         downloader::clean();
     }
 
-    // Create our channels
-    let (finish_tx, finish_rx) = mpsc::channel();
-
     // Start the thread which downloads the files
     thread::spawn(move || {
-        downloader::run_loop(&finish_rx).expect("Downloading Error");
+        downloader::run_loop().expect("Downloading Error");
     });
 
     // Open the window. This has to happen on the main thread for reasons
