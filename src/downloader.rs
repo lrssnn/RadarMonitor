@@ -1,19 +1,19 @@
 extern crate ftp;
 
+use ftp::FtpStream;
 use std;
-use std::str;
-use std::str::FromStr;
-use std::io::prelude::*;
 use std::fs;
 use std::fs::File;
+use std::io::prelude::*;
+use std::str;
+use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
-use ftp::FtpStream;
 
-use super::DL_DIR;
-use super::CODE_MID;
 use super::CODE_LOW;
+use super::CODE_MID;
 use super::CODE_HIGH;
+use super::DL_DIR;
 
 //Simple timecode struct used to determine file contiguousness
 #[derive(Debug)]
@@ -22,7 +22,7 @@ struct Timecode {
     month: usize,
     day: usize,
     hour: usize,
-    min: usize
+    min: usize,
 }
 
 pub fn run_loop() -> Result<(), ()> {
@@ -37,14 +37,12 @@ pub fn run_loop() -> Result<(), ()> {
     }
 }
 
-// Connect to the BOM ftp server and download any new files 
+// Connect to the BOM ftp server and download any new files
 // Saves files for all three zoom levels
 // Files are saved to the folder DL_DIR/lc_code and are prefixed with an 'x' to designate them as
 // new.
 // Returns Ok(()) if everything was ok. Propogates an error if there is an ftp error
 pub fn save_files() -> ftp::types::Result<()> {
-
-
     // Connect to the server, login, change directory
     let mut ftp_stream = FtpStream::connect("ftp2.bom.gov.au:21")?;
     ftp_stream.login("anonymous", "guest")?;
@@ -53,8 +51,7 @@ pub fn save_files() -> ftp::types::Result<()> {
     // Find out which files are currently on the server
     let filenames = ftp_stream.nlst(Option::None)?;
 
-    for lc_code in &[CODE_LOW, CODE_MID, CODE_HIGH]{
-
+    for lc_code in &[CODE_LOW, CODE_MID, CODE_HIGH] {
         let mut downloads = 0;
         let mut filenames = filenames.clone();
 
@@ -71,7 +68,7 @@ pub fn save_files() -> ftp::types::Result<()> {
             if File::open(DL_DIR.to_string() + lc_code + "/" + &file_name).is_ok() {
                 continue;
             }
-            
+
             // Print a message (one line only regardless of number of files)
             print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
             std::io::stdout().flush().expect("Error flushing stdout");
@@ -124,8 +121,8 @@ pub fn wait_mins(mins: usize) {
 
 // Run first time initialisation tasks such as creating directories and priming with images
 // Will panic if initialisation fails
-pub fn init(){
-    // Attempt to create the download directory, not caring if it succeeds or if it fails 
+pub fn init() {
+    // Attempt to create the download directory, not caring if it succeeds or if it fails
     // (the directory already exists)
     match fs::create_dir(DL_DIR) {
         Ok(_) | Err(_) => (),
@@ -145,12 +142,11 @@ pub fn init(){
     mark_files_as_new(CODE_HIGH);
 }
 
-// Save the radar background for location code 'lc_code' and create the subdirectory for 
+// Save the radar background for location code 'lc_code' and create the subdirectory for
 // that radar's images
 // Propogates any FTP errors upstream, panics on file system errors
 pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
-
-    // Do nothing on an error. Generally an error here means that the directory 
+    // Do nothing on an error. Generally an error here means that the directory
     // already exists which is what we want
     match fs::create_dir(DL_DIR.to_string() + lc_code + "/") {
         Ok(_) | Err(_) => (),
@@ -173,9 +169,11 @@ pub fn init_background(lc_code: &str) -> ftp::types::Result<()> {
     let mut lc_file = File::create(location_file_name).expect("Error creating file on disk");
 
     // Write the files
-    bg_file.write_all(background_file.into_inner().as_slice())
+    bg_file
+        .write_all(background_file.into_inner().as_slice())
         .expect("Error writing file to disk");
-    lc_file.write_all(location_file.into_inner().as_slice())
+    lc_file
+        .write_all(location_file.into_inner().as_slice())
         .expect("Error writing file to disk");
     // Disconnect from the server
     let _ = ftp_stream.quit();
@@ -199,21 +197,26 @@ fn mark_files_as_new(location_code: &str) {
         .collect();
 
     // Filter out any files which already have the prefix
-    let mut file_names = files.iter().filter(|e| !e.starts_with('x')).collect::<Vec<_>>();
+    let mut file_names = files
+        .iter()
+        .filter(|e| !e.starts_with('x'))
+        .collect::<Vec<_>>();
 
     file_names.sort();
 
     // Prefix each file
     for file_name in file_names {
         let new_name = "x".to_string() + file_name;
-        fs::rename(&(dir.to_string() + file_name),
-                   &(dir.to_string() + &new_name))
-            .expect("Error renaming file");
+        fs::rename(
+            &(dir.to_string() + file_name),
+            &(dir.to_string() + &new_name),
+        )
+        .expect("Error renaming file");
     }
 }
 
 // Removes non-contiguous files from each image directory
-// i.e. leaves only the most recent streak of contiguous images based on the 
+// i.e. leaves only the most recent streak of contiguous images based on the
 // assumption that each image from the radar comes six minutes after the previous one
 pub fn clean() {
     let file_error = "Error reading file system";
@@ -221,8 +224,8 @@ pub fn clean() {
     let dirs;
     // If DL_DIR doesn't exist, there is nothing to clean
     match fs::read_dir(DL_DIR) {
-        Ok(d)  => { dirs = d }
-        Err(_) => { return }
+        Ok(d) => dirs = d,
+        Err(_) => return,
     };
 
     // Iterate through the subdirectories (zoom levels)
@@ -230,20 +233,16 @@ pub fn clean() {
         let files = fs::read_dir(dir.expect(file_error).path()).expect(file_error);
 
         // Get the path for each file
-        let mut file_names: Vec<_> = files.map(|e| {
-            e.expect(file_error)
-                .path()
-        })
-        .collect();
+        let mut file_names: Vec<_> = files.map(|e| e.expect(file_error).path()).collect();
         file_names.sort();
 
         let mut del = 0;
         // Iterate through the files in reverse order (newest to oldest)
         // If del is true we have already found a break in continuity and are just deleting
-        for (i, prev) in file_names.iter().enumerate().rev(){
-            if i+1 != file_names.len() {
+        for (i, prev) in file_names.iter().enumerate().rev() {
+            if i + 1 != file_names.len() {
                 // Look ahead 1
-                let file = &file_names[i+1];
+                let file = &file_names[i + 1];
                 if del > 0 {
                     del += 1;
                     print!("\r({:02}) Deleting: {:?}", del, prev);
@@ -263,10 +262,13 @@ pub fn clean() {
 
 // Converts a file path to a Timecode object
 // Assumes that the file given is a BOM radar image
-fn timecode_from_path(name: &std::path::Path) -> Timecode{ 
+fn timecode_from_path(name: &std::path::Path) -> Timecode {
     // Get the file name
-    let name = name.file_name().expect("Error reading file name")
-        .to_str().expect("String conversion error");
+    let name = name
+        .file_name()
+        .expect("Error reading file name")
+        .to_str()
+        .expect("String conversion error");
 
     // Split at each dot and take the third (just the timecode)
     let string = name.split('.').nth(2).expect("Unexpected file format");
@@ -279,12 +281,12 @@ fn timecode_from_path(name: &std::path::Path) -> Timecode{
     let (min, _) = string.split_at(2);
 
     // Convert into numbers and return
-    Timecode{
-        year:  usize::from_str(year).expect("Unexpected file format"),
+    Timecode {
+        year: usize::from_str(year).expect("Unexpected file format"),
         month: usize::from_str(month).expect("Unexpected file format"),
-        day:   usize::from_str(day).expect("Unexpected file format"),
-        hour:  usize::from_str(hour).expect("Unexpected file format"),
-        min:   usize::from_str(min).expect("Unexpected file format"),
+        day: usize::from_str(day).expect("Unexpected file format"),
+        hour: usize::from_str(hour).expect("Unexpected file format"),
+        min: usize::from_str(min).expect("Unexpected file format"),
     }
 }
 
@@ -296,12 +298,13 @@ fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     let next = timecode_from_path(next);
 
     // Chain through the different levels of time timecode
-    // Not entirely sure that every level works but it at least works across 
+    // Not entirely sure that every level works but it at least works across
     // Hour boundaries so for the most part is ok
-    if prev.min + 6 == next.min ||
-    (next.min <= 6 && prev.hour + 1 == next.hour) ||
-    (next.hour == 0 && prev.day + 1 == next.day) ||
-    (next.day == 0 && prev.month + 1 == next.month){
+    if prev.min + 6 == next.min
+        || (next.min <= 6 && prev.hour + 1 == next.hour)
+        || (next.hour == 0 && prev.day + 1 == next.day)
+        || (next.day == 0 && prev.month + 1 == next.month)
+    {
         true
     } else {
         next.month == 0 && prev.year + 1 == next.year
