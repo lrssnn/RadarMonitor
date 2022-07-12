@@ -1,5 +1,4 @@
 use super::glium;
-use glium::texture::{RawImage2d, Texture2d};
 use glium::DrawError;
 
 use glium::glutin::event::ElementState;
@@ -7,9 +6,6 @@ use glium::glutin::event::KeyboardInput;
 use glium::glutin::event::VirtualKeyCode as Key;
 use glium::glutin::event::WindowEvent;
 use glium::glutin::event_loop::ControlFlow;
-use glium::glutin::event_loop::EventLoop;
-
-use glium::uniforms::{EmptyUniforms, UniformsStorage};
 
 use std::fs;
 use std::iter::Iterator;
@@ -18,7 +14,8 @@ use std::time::Duration;
 use std::time::Instant;
 
 mod renderer;
-use image_viewer::renderer::Renderable;
+mod renderable;
+use image_viewer::renderable::Renderable;
 use image_viewer::renderer::Renderer;
 
 use super::CODE_LOW;
@@ -29,8 +26,6 @@ use super::SPEED_FAST;
 use super::SPEED_MID;
 use super::SPEED_SLOW;
 
-extern crate image;
-
 // Opens a new window, displaying only the files that currently exist in img
 pub fn open_window() -> Result<(), DrawError> {
     let mut index = 0;
@@ -38,8 +33,7 @@ pub fn open_window() -> Result<(), DrawError> {
     let mut frame_time = SPEED_MID;
 
     // Do a bunch of init garbage
-    let (display, events_loop) = create_display();
-    let mut renderer = Renderer::new(display);
+    let (mut renderer, events_loop) = Renderer::new();
     let (bg_renderables, lc_renderables) = background_init(&renderer.display);
     let mut renderables = create_all_renderables_from_files(&renderer.display);
     let frame_time_nano = (frame_time * 1000000) as u64;
@@ -119,22 +113,6 @@ pub fn open_window() -> Result<(), DrawError> {
     })
 }
 
-// Open a window and return the display and the associated events loop
-fn create_display() -> (glium::Display, EventLoop<()>) {
-    let events_loop = EventLoop::new();
-
-    let window = glium::glutin::window::WindowBuilder::new()
-        .with_inner_size(glium::glutin::dpi::PhysicalSize::new(512, 512))
-        .with_title("Radar Monitor");
-
-    let context = glium::glutin::ContextBuilder::new();
-
-    let display =
-        glium::Display::new(window, context, &events_loop).expect("Failed to create display");
-
-    (display, events_loop)
-}
-
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
     if faster {
@@ -171,14 +149,14 @@ fn background_init(display: &glium::Display) -> ([Renderable; 3], [Renderable; 3
     // What is formatting
     (
         [
-            renderable_from_image(display, &(CODE_LOW.to_string() + ".background.png")),
-            renderable_from_image(display, &(CODE_MID.to_string() + ".background.png")),
-            renderable_from_image(display, &(CODE_HIGH.to_string() + ".background.png")),
+            Renderable::from_disk_image(display, &(CODE_LOW.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(display, &(CODE_MID.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(display, &(CODE_HIGH.to_string() + ".background.png"), (-0.5, -0.5)),
         ],
         [
-            renderable_from_image(display, &(CODE_LOW.to_string() + ".locations.png")),
-            renderable_from_image(display, &(CODE_MID.to_string() + ".locations.png")),
-            renderable_from_image(display, &(CODE_HIGH.to_string() + ".locations.png")),
+            Renderable::from_disk_image(display, &(CODE_LOW.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(display, &(CODE_MID.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(display, &(CODE_HIGH.to_string() + ".locations.png"), (0.5, -0.5)),
         ],
     )
 }
@@ -187,9 +165,9 @@ fn create_all_renderables_from_files(display: &glium::Display) -> [Vec<Renderabl
     let start = Instant::now();
 
     let renderables = [
-        create_renderables_from_files(display, CODE_LOW),
-        create_renderables_from_files(display, CODE_MID),
-        create_renderables_from_files(display, CODE_HIGH),
+        Renderable::from_location_folder(display, CODE_LOW),
+        Renderable::from_location_folder(display, CODE_MID),
+        Renderable::from_location_folder(display, CODE_HIGH),
     ];
 
     let end = Instant::now();
@@ -203,33 +181,6 @@ fn create_all_renderables_from_files(display: &glium::Display) -> [Vec<Renderabl
     );
 
     renderables
-}
-
-fn create_renderables_from_files(display: &glium::Display, lc_code: &str) -> Vec<Renderable> {
-    let dir = &(DL_DIR.to_string() + lc_code + "/");
-    let files = fs::read_dir(dir).expect("Error reading image directory");
-    let mut file_names: Vec<_> = files
-        .map(|e| {
-            e.expect("Error reading image filename")
-                .file_name()
-                .into_string()
-                .expect("Error extracting image filename")
-        })
-        .collect();
-
-    file_names.sort();
-
-    file_names
-        .iter()
-        .map(|e| {
-            let r = renderable_from_image(display, &(dir.to_string() + e));
-            let mut new_name = e.clone();
-            new_name.remove(0);
-            fs::rename(&(dir.to_string() + e), &(dir.to_string() + &new_name))
-                .expect("Error renaming file");
-            r
-        })
-        .collect()
 }
 
 fn add_all_new_renderables(display: &glium::Display, vecs: &mut [Vec<Renderable>; 3]) {
@@ -259,7 +210,7 @@ fn add_new_renderables(display: &glium::Display, vec: &mut Vec<Renderable>, lc_c
     file_names.sort();
 
     for file_name in file_names {
-        vec.push(renderable_from_image(display, &(dir.to_string() + file_name)));
+        vec.push(Renderable::from_disk_image(display, &(dir.to_string() + file_name), (0.5, 0.5)));
         let mut new_name = file_name.clone();
         new_name.remove(0);
         fs::rename(
@@ -268,16 +219,4 @@ fn add_new_renderables(display: &glium::Display, vec: &mut Vec<Renderable>, lc_c
         )
         .expect("Error renaming file");
     }
-}
-
-fn renderable_from_image(display: &glium::Display, img: &str) -> Renderable {
-    let image = image::open(img)
-        .expect("Error opening image file")
-        .to_rgba8();
-
-    let image_dim = image.dimensions();
-    let image = RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dim);
-    let texture = Texture2d::new(display, image).expect("Error creating texture from image");
-
-    Renderable { texture }
 }
