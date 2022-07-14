@@ -1,10 +1,10 @@
+use super::renderable::Renderable;
 use glium::draw_parameters::{Blend, DrawParameters};
 use glium::glutin::event_loop::EventLoop;
 use glium::index::PrimitiveType;
 use glium::texture::Texture2d;
 use glium::uniforms::{EmptyUniforms, UniformsStorage};
 use glium::{Display, Frame, IndexBuffer, Program, Surface, VertexBuffer};
-use super::renderable::Renderable;
 
 #[derive(Copy, Clone)]
 struct Vertex {
@@ -51,12 +51,12 @@ impl Renderer {
         let program = link_shader(&display);
         let (vb, ib) = create_buffers(&display);
 
-        let renderer = Renderer { 
-            display, 
-            program, 
-            vb, 
-            ib, 
-            target: None
+        let renderer = Renderer {
+            display,
+            program,
+            vb,
+            ib,
+            target: None,
         };
 
         (renderer, events_loop)
@@ -68,14 +68,23 @@ impl Renderer {
         self.target = Some(target);
     }
 
-    pub fn draw(&mut self, item: &Renderable) {
+    pub fn draw(&mut self, item: &mut Renderable) {
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
             ..Default::default()
         };
 
         if let Some(target) = &mut self.target {
-            target.draw(&self.vb, &self.ib, &self.program, &uniforms(&item.texture, item.matrix()), &params).expect("Error drawing BG");
+            let matrix = item.matrix();
+            target
+                .draw(
+                    &self.vb,
+                    &self.ib,
+                    &self.program,
+                    &uniforms(&item.get_texture(&self.display), matrix),
+                    &params,
+                )
+                .expect("Error drawing BG");
         } else {
             panic!("Drew without a target, probably draw call without a new_frame call");
         }
@@ -84,7 +93,7 @@ impl Renderer {
     pub fn finish_frame(&mut self) {
         if let Some(target) = self.target.take() {
             target.finish().expect("Frame Finishing Error");
-            self.target = None; 
+            self.target = None;
         } else {
             panic!("Finished without a target, probably called without a new_frame call");
         }
@@ -92,7 +101,10 @@ impl Renderer {
 }
 
 // Just a wrapper to be more readable at the draw call. This type signature is horrible...
-fn uniforms(tex: &Texture2d, matrix: [[f32; 4]; 4]) -> UniformsStorage<[[f32; 4]; 4], UniformsStorage<&Texture2d, EmptyUniforms>> {
+fn uniforms(
+    tex: &Texture2d,
+    matrix: [[f32; 4]; 4],
+) -> UniformsStorage<[[f32; 4]; 4], UniformsStorage<&Texture2d, EmptyUniforms>> {
     uniform! {
         tex: tex,
         matrix: matrix

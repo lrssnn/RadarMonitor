@@ -10,9 +10,9 @@ use std::str::FromStr;
 use std::thread::sleep;
 use std::time::Duration;
 
+use super::CODE_HIGH;
 use super::CODE_LOW;
 use super::CODE_MID;
-use super::CODE_HIGH;
 use super::DL_DIR;
 
 //Simple timecode struct used to determine file contiguousness
@@ -70,7 +70,7 @@ pub fn save_files() -> ftp::types::Result<()> {
             }
 
             // Print a message (one line only regardless of number of files)
-            print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
+            print!("\r({:02}) downloading '{}...'", downloads + 1, file_name);
             std::io::stdout().flush().expect("Error flushing stdout");
 
             // Get the file from the server

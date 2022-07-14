@@ -13,14 +13,14 @@ use std::str;
 use std::time::Duration;
 use std::time::Instant;
 
-mod renderer;
 mod renderable;
+mod renderer;
 use image_viewer::renderable::Renderable;
 use image_viewer::renderer::Renderer;
 
+use super::CODE_HIGH;
 use super::CODE_LOW;
 use super::CODE_MID;
-use super::CODE_HIGH;
 use super::DL_DIR;
 use super::SPEED_FAST;
 use super::SPEED_MID;
@@ -34,8 +34,8 @@ pub fn open_window() -> Result<(), DrawError> {
 
     // Do a bunch of init garbage
     let (mut renderer, events_loop) = Renderer::new();
-    let (bg_renderables, lc_renderables) = background_init(&renderer.display);
-    let mut renderables = create_all_renderables_from_files(&renderer.display);
+    let (mut bg_renderables, mut lc_renderables) = background_init();
+    let mut renderables = create_all_renderables_from_files();
     let frame_time_nano = (frame_time * 1000000) as u64;
     let mut next_frame_time = Instant::now() + Duration::from_nanos(frame_time_nano);
 
@@ -91,9 +91,9 @@ pub fn open_window() -> Result<(), DrawError> {
 
         renderer.new_frame();
         // Draw the background, then map overlay, then radar data
-        renderer.draw(&bg_renderables[zoom]);
-        renderer.draw(&lc_renderables[zoom]);
-        renderer.draw(&renderables[zoom][index]);
+        renderer.draw(&mut bg_renderables[zoom]);
+        renderer.draw(&mut lc_renderables[zoom]);
+        renderer.draw(&mut renderables[zoom][index]);
 
         renderer.finish_frame();
 
@@ -108,11 +108,10 @@ pub fn open_window() -> Result<(), DrawError> {
 
         // Check for new images if we just wrapped around
         if index == 0 {
-            add_all_new_renderables(&renderer.display, &mut renderables);
+            add_all_new_renderables(&mut renderables);
         }
     })
 }
-
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
     if faster {
@@ -145,51 +144,37 @@ fn change_speed(current: usize, increase: bool) -> usize {
 }
 
 // Create background and location texture arrays. Just to clean up init in main function
-fn background_init(display: &glium::Display) -> ([Renderable; 3], [Renderable; 3]) {
+fn background_init() -> ([Renderable; 3], [Renderable; 3]) {
     // What is formatting
     (
         [
-            Renderable::from_disk_image(display, &(CODE_LOW.to_string() + ".background.png"), (-0.5, -0.5)),
-            Renderable::from_disk_image(display, &(CODE_MID.to_string() + ".background.png"), (-0.5, -0.5)),
-            Renderable::from_disk_image(display, &(CODE_HIGH.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".background.png"), (-0.5, -0.5)),
         ],
         [
-            Renderable::from_disk_image(display, &(CODE_LOW.to_string() + ".locations.png"), (0.5, -0.5)),
-            Renderable::from_disk_image(display, &(CODE_MID.to_string() + ".locations.png"), (0.5, -0.5)),
-            Renderable::from_disk_image(display, &(CODE_HIGH.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".locations.png"), (0.5, -0.5)),
         ],
     )
 }
 
-fn create_all_renderables_from_files(display: &glium::Display) -> [Vec<Renderable>; 3] {
-    let start = Instant::now();
-
-    let renderables = [
-        Renderable::from_location_folder(display, CODE_LOW),
-        Renderable::from_location_folder(display, CODE_MID),
-        Renderable::from_location_folder(display, CODE_HIGH),
-    ];
-
-    let end = Instant::now();
-    let time = end.duration_since(start).as_millis();
-    let num_renderables = (renderables[0].len() + renderables[1].len() + renderables[2].len()) as u128;
-    let renderable_millis = time / num_renderables;
-
-    println!(
-        "Created {} renderables in {}ms ({} ms/renderable)",
-        num_renderables, time, renderable_millis
-    );
-
-    renderables
+fn create_all_renderables_from_files() -> [Vec<Renderable>; 3] {
+    [
+        Renderable::from_location_folder(CODE_LOW),
+        Renderable::from_location_folder(CODE_MID),
+        Renderable::from_location_folder(CODE_HIGH),
+    ]
 }
 
-fn add_all_new_renderables(display: &glium::Display, vecs: &mut [Vec<Renderable>; 3]) {
-    add_new_renderables(display, &mut vecs[0], CODE_LOW);
-    add_new_renderables(display, &mut vecs[1], CODE_MID);
-    add_new_renderables(display, &mut vecs[2], CODE_HIGH);
+fn add_all_new_renderables(vecs: &mut [Vec<Renderable>; 3]) {
+    add_new_renderables(&mut vecs[0], CODE_LOW);
+    add_new_renderables(&mut vecs[1], CODE_MID);
+    add_new_renderables(&mut vecs[2], CODE_HIGH);
 }
 
-fn add_new_renderables(display: &glium::Display, vec: &mut Vec<Renderable>, lc_code: &str) {
+fn add_new_renderables(vec: &mut Vec<Renderable>, lc_code: &str) {
     let dir = &(DL_DIR.to_string() + lc_code + "/");
     let files = fs::read_dir(&dir).expect("Error reading image directory");
 
@@ -210,9 +195,12 @@ fn add_new_renderables(display: &glium::Display, vec: &mut Vec<Renderable>, lc_c
     file_names.sort();
 
     for file_name in file_names {
-        vec.push(Renderable::from_disk_image(display, &(dir.to_string() + file_name), (0.5, 0.5)));
         let mut new_name = file_name.clone();
         new_name.remove(0);
+        vec.push(Renderable::from_disk_image(
+            &(dir.to_string() + &new_name),
+            (0.5, 0.5),
+        ));
         fs::rename(
             &(dir.to_string() + file_name),
             &(dir.to_string() + &new_name),
