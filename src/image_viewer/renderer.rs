@@ -81,7 +81,7 @@ impl Renderer {
                     &self.vb,
                     &self.ib,
                     &self.program,
-                    &uniforms(&item.get_texture(&self.display), matrix),
+                    &uniforms(item.get_texture(&self.display), matrix),
                     &params,
                 )
                 .expect("Error drawing BG");

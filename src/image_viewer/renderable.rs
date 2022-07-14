@@ -64,7 +64,7 @@ impl Renderable {
 
     pub fn get_texture(&mut self, display: &glium::Display) -> &Texture2d {
         // We lazy load the textures, so the first time we ask for this we need to populate this
-        if let None = &self.texture {
+        if self.texture.is_none() {
             println!("Trying to open {}", &self.img);
             let image = image::open(&self.img)
                 .expect("Error opening image file")

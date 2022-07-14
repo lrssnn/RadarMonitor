@@ -221,10 +221,9 @@ fn mark_files_as_new(location_code: &str) {
 pub fn clean() {
     let file_error = "Error reading file system";
 
-    let dirs;
     // If DL_DIR doesn't exist, there is nothing to clean
-    match fs::read_dir(DL_DIR) {
-        Ok(d) => dirs = d,
+    let dirs = match fs::read_dir(DL_DIR) {
+        Ok(d) => d,
         Err(_) => return,
     };
 
