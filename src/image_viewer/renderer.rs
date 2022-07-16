@@ -116,7 +116,7 @@ fn create_display() -> (glium::Display, EventLoop<()>) {
     let events_loop = EventLoop::new();
 
     let window = glium::glutin::window::WindowBuilder::new()
-        .with_inner_size(glium::glutin::dpi::PhysicalSize::new(512, 512))
+        .with_inner_size(glium::glutin::dpi::PhysicalSize::new(512, 512 + 128)) // 128 pixels for UI at the bottom
         .with_title("Radar Monitor");
 
     let context = glium::glutin::ContextBuilder::new();

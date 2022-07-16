@@ -16,6 +16,7 @@ use std::time::Instant;
 mod renderable;
 mod renderer;
 use image_viewer::renderable::Renderable;
+use image_viewer::renderable::RenderableType;
 use image_viewer::renderer::Renderer;
 
 use super::CODE_HIGH;
@@ -148,14 +149,14 @@ fn background_init() -> ([Renderable; 3], [Renderable; 3]) {
     // What is formatting
     (
         [
-            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".background.png"), (-0.5, -0.5)),
-            Renderable::from_disk_image(&(CODE_MID.to_string() + ".background.png"), (-0.5, -0.5)),
-            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".background.png"), (-0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".background.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".background.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".background.png"), RenderableType::MainImage),
         ],
         [
-            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".locations.png"), (0.5, -0.5)),
-            Renderable::from_disk_image(&(CODE_MID.to_string() + ".locations.png"), (0.5, -0.5)),
-            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".locations.png"), (0.5, -0.5)),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".locations.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".locations.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".locations.png"), RenderableType::MainImage),
         ],
     )
 }
@@ -199,7 +200,7 @@ fn add_new_renderables(vec: &mut Vec<Renderable>, lc_code: &str) {
         new_name.remove(0);
         vec.push(Renderable::from_disk_image(
             &(dir.to_string() + &new_name),
-            (0.5, 0.5),
+            RenderableType::MainImage,
         ));
         fs::rename(
             &(dir.to_string() + file_name),

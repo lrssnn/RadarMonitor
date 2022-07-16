@@ -4,19 +4,36 @@ use std::fs;
 
 use super::DL_DIR;
 
+pub enum RenderableType {
+    MainImage,
+    BottomUI,
+}
+
+fn get_type_values(t: RenderableType) -> ((f32, f32), (f32, f32)) {
+    match t {
+        // Window height is 640, main image height is 512, so vertical scale is 80%
+        // Window centre point is 320px from top, image centre point needs to go 256px from top
+        // so vertical offset is 64 pixels which is 20% (0.2) of the 640 window height
+        RenderableType::MainImage => ((1.0, 0.80), (0.0, 0.2)),
+        // vertical offset is 256 pixels which is 80% (0.8) of the 640 window height
+        RenderableType::BottomUI => ((1.0, 0.20), (0.0, -0.8)),
+    }
+}
+
 pub struct Renderable {
     pub translation: (f32, f32), // offset of the centre of the image, where the centre of the window is (0, 0)
-    pub scale: f32,              // scale where 1.0 is the entire window
+    pub scale: (f32, f32),       // scale where 1.0 is the entire window
 
     pub img: String,                // Filename for image texture
     pub texture: Option<Texture2d>, // Lazy loaded texture object from above
 }
 
 impl Renderable {
-    pub fn from_disk_image(img: &str, translation: (f32, f32)) -> Self {
+    pub fn from_disk_image(img: &str, renderable_type: RenderableType) -> Self {
+        let (scale, translation) = get_type_values(renderable_type);
         Renderable {
             translation,
-            scale: 0.5,
+            scale,
             img: img.to_owned(),
             texture: None,
         }
@@ -42,7 +59,7 @@ impl Renderable {
             .map(|e| {
                 let mut new_name = e.clone();
                 new_name.remove(0);
-                let r = Renderable::from_disk_image(&(dir.to_string() + &new_name), (0.5, 0.5));
+                let r = Renderable::from_disk_image(&(dir.to_string() + &new_name), RenderableType::MainImage);
                 fs::rename(&(dir.to_string() + e), &(dir.to_string() + &new_name))
                     .expect("Error renaming file");
                 r
@@ -51,12 +68,13 @@ impl Renderable {
     }
 
     pub fn matrix(&self) -> [[f32; 4]; 4] {
-        let s = self.scale;
+        let sx = self.scale.0;
+        let sy = self.scale.1;
         let tx = self.translation.0;
         let ty = self.translation.1;
         [
-            [s,   0.0, 0.0, 0.0],
-            [0.0, s,   0.0, 0.0],
+            [sx,  0.0, 0.0, 0.0],
+            [0.0, sy,  0.0, 0.0],
             [0.0, 0.0, 1.0, 0.0],
             [tx,  ty,  0.0, 1.0]
         ]
