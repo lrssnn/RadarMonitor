@@ -75,7 +75,7 @@ impl Renderer {
         };
 
         if let Some(target) = &mut self.target {
-            let matrix = item.matrix();
+            let matrix = item.matrix;
             target
                 .draw(
                     &self.vb,
@@ -96,6 +96,29 @@ impl Renderer {
             self.target = None;
         } else {
             panic!("Finished without a target, probably called without a new_frame call");
+        }
+    }
+
+    pub(crate) fn draw_with_offset(&mut self, item: &mut Renderable, offset: f32) {
+        let params = DrawParameters {
+            blend: Blend::alpha_blending(),
+            ..Default::default()
+        };
+
+        if let Some(target) = &mut self.target {
+            let mut matrix = item.matrix;
+            matrix[3][0] = offset;
+            target
+                .draw(
+                    &self.vb,
+                    &self.ib,
+                    &self.program,
+                    &uniforms(item.get_texture(&self.display), matrix),
+                    &params,
+                )
+                .expect("Error drawing BG");
+        } else {
+            panic!("Drew without a target, probably draw call without a new_frame call");
         }
     }
 }

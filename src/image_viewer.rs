@@ -1,3 +1,4 @@
+use std::sync::mpsc::Receiver;
 use super::glium;
 use glium::DrawError;
 
@@ -28,7 +29,7 @@ use super::SPEED_MID;
 use super::SPEED_SLOW;
 
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window() -> Result<(), DrawError> {
+pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
     let mut index = 0;
     let mut zoom = 1;
     let mut frame_time = SPEED_MID;
@@ -37,10 +38,20 @@ pub fn open_window() -> Result<(), DrawError> {
     let (mut renderer, events_loop) = Renderer::new();
     let (mut bg_renderables, mut lc_renderables) = background_init();
     let mut renderables = create_all_renderables_from_files();
+    let mut state = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::BottomSlice);
     let frame_time_nano = (frame_time * 1000000) as u64;
     let mut next_frame_time = Instant::now() + Duration::from_nanos(frame_time_nano);
 
+    // This file should probably think about the time, and the renderable itself should know how to make that
+    // an offset...
+    let mut timer_offset = 0.0;
+
     events_loop.run(move |ev, _, control_flow| {
+        // Check channel for update
+        if let Ok(offset) = receiver.try_recv(){
+            timer_offset = (offset * 2.0) - 1.0;
+        }
+
         if let glium::glutin::event::Event::WindowEvent { event, .. } = ev {
             match event {
                 WindowEvent::CloseRequested => {
@@ -70,7 +81,7 @@ pub fn open_window() -> Result<(), DrawError> {
                             index = 0;
                         }
                     }
-                    Key::Escape => {
+                    Key::Escape | Key::Q => {
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
@@ -95,6 +106,8 @@ pub fn open_window() -> Result<(), DrawError> {
         renderer.draw(&mut bg_renderables[zoom]);
         renderer.draw(&mut lc_renderables[zoom]);
         renderer.draw(&mut renderables[zoom][index]);
+
+        renderer.draw_with_offset(&mut state, timer_offset);
 
         renderer.finish_frame();
 

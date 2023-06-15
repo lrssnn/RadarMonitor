@@ -7,6 +7,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::str;
 use std::str::FromStr;
+use std::sync::mpsc::Sender;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -25,14 +26,14 @@ struct Timecode {
     min: usize,
 }
 
-pub fn run_loop() -> Result<(), ()> {
+pub fn run_loop(sender: Sender<f32>) -> Result<(), ()> {
     loop {
         // Wait for 5 minutes, then check the server every minute until we get at least
         // 1 new file
-        wait_mins(5);
+        wait_mins(4, &sender);
 
         while save_files().is_err() {
-            wait_mins(1)
+            wait_mins(1, &sender)
         }
     }
 }
@@ -98,14 +99,19 @@ pub fn save_files() -> ftp::types::Result<()> {
 }
 
 // Wait for 'mins' minutes while printing a report of how long remains.
-pub fn wait_mins(mins: usize) {
-    let mut secs = mins * 60;
+pub fn wait_mins(mins: usize, sender: &Sender<f32>) {
+    let max_secs = mins * 60;
+    let mut secs = max_secs;
 
     let one_sec = Duration::new(1, 0);
 
     while secs > 0 {
         print!("\rWaiting {} seconds...     ", secs);
         std::io::stdout().flush().expect("Error flushing stdout");
+
+        // How far through the wait time from 0.0 -> 1.0
+        let wait_scale = 1.0 - (secs as f32 / max_secs as f32);
+        sender.send(wait_scale).expect("Sending fail");
 
         sleep(one_sec);
 

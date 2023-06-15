@@ -6,23 +6,30 @@ use super::DL_DIR;
 
 pub enum RenderableType {
     MainImage,
-    BottomUI,
+    BottomSlice,
 }
 
-fn get_type_values(t: RenderableType) -> ((f32, f32), (f32, f32)) {
-    match t {
+fn get_type_matrix(t: RenderableType) -> [[f32; 4]; 4] {
+    let ((sx, sy), (tx, ty)) = match t {
         // Window height is 640, main image height is 512, so vertical scale is 80%
         // Window centre point is 320px from top, image centre point needs to go 256px from top
         // so vertical offset is 64 pixels which is 20% (0.2) of the 640 window height
         RenderableType::MainImage => ((1.0, 0.80), (0.0, 0.2)),
         // vertical offset is 256 pixels which is 80% (0.8) of the 640 window height
-        RenderableType::BottomUI => ((1.0, 0.20), (0.0, -0.8)),
-    }
+        // 1 percent of the horizontal width
+        RenderableType::BottomSlice => ((0.01, 0.20), (-1.0, -0.8)),
+    };
+
+    [
+        [sx,  0.0, 0.0, 0.0],
+        [0.0, sy,  0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+        [tx,  ty,  0.0, 1.0]
+    ]
 }
 
 pub struct Renderable {
-    pub translation: (f32, f32), // offset of the centre of the image, where the centre of the window is (0, 0)
-    pub scale: (f32, f32),       // scale where 1.0 is the entire window
+    pub matrix: [[f32; 4]; 4],      // Transformation Matrix
 
     pub img: String,                // Filename for image texture
     pub texture: Option<Texture2d>, // Lazy loaded texture object from above
@@ -30,10 +37,8 @@ pub struct Renderable {
 
 impl Renderable {
     pub fn from_disk_image(img: &str, renderable_type: RenderableType) -> Self {
-        let (scale, translation) = get_type_values(renderable_type);
         Renderable {
-            translation,
-            scale,
+            matrix: get_type_matrix(renderable_type),
             img: img.to_owned(),
             texture: None,
         }
@@ -67,23 +72,9 @@ impl Renderable {
             .collect()
     }
 
-    pub fn matrix(&self) -> [[f32; 4]; 4] {
-        let sx = self.scale.0;
-        let sy = self.scale.1;
-        let tx = self.translation.0;
-        let ty = self.translation.1;
-        [
-            [sx,  0.0, 0.0, 0.0],
-            [0.0, sy,  0.0, 0.0],
-            [0.0, 0.0, 1.0, 0.0],
-            [tx,  ty,  0.0, 1.0]
-        ]
-    }
-
     pub fn get_texture(&mut self, display: &glium::Display) -> &Texture2d {
         // We lazy load the textures, so the first time we ask for this we need to populate this
         if self.texture.is_none() {
-            println!("Trying to open {}", &self.img);
             let image = image::open(&self.img)
                 .expect("Error opening image file")
                 .to_rgba8();

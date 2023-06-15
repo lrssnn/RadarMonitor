@@ -2,6 +2,7 @@
 extern crate glium;
 extern crate ftp;
 
+use std::sync::mpsc::channel;
 use std::env;
 use std::thread;
 
@@ -34,18 +35,21 @@ fn main() {
         }
     }
 
-    downloader::init();
+    // Create some channels for communication
+    let (tx, rx) = channel::<f32>();
 
     if clean {
         println!("Cleaning images directory");
         downloader::clean();
     }
 
+    downloader::init();
+
     // Start the thread which downloads the files
     thread::spawn(move || {
-        downloader::run_loop().expect("Downloading Error");
+        downloader::run_loop(tx).expect("Downloading Error");
     });
 
     // Open the window. This has to happen on the main thread for reasons
-    image_viewer::open_window().expect("Drawing Error");
+    image_viewer::open_window(rx).expect("Drawing Error");
 }
