@@ -190,7 +190,7 @@ fn add_all_new_renderables(vecs: &mut [Vec<Renderable>; 3]) {
 
 fn add_new_renderables(vec: &mut Vec<Renderable>, lc_code: &str) {
     let dir = &(DL_DIR.to_string() + lc_code + "/");
-    let files = fs::read_dir(&dir).expect("Error reading image directory");
+    let files = fs::read_dir(dir).expect("Error reading image directory");
 
     let file_names: Vec<_> = files
         .map(|e| {

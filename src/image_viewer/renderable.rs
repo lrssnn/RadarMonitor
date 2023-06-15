@@ -65,7 +65,7 @@ impl Renderable {
                 let mut new_name = e.clone();
                 new_name.remove(0);
                 let r = Renderable::from_disk_image(&(dir.to_string() + &new_name), RenderableType::MainImage);
-                fs::rename(&(dir.to_string() + e), &(dir.to_string() + &new_name))
+                fs::rename(dir.to_string() + e, dir.to_string() + &new_name)
                     .expect("Error renaming file");
                 r
             })
