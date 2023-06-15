@@ -217,7 +217,7 @@ fn mark_files_as_new(location_code: &str) {
 
 // Removes non-contiguous files from each image directory
 // i.e. leaves only the most recent streak of contiguous images based on the
-// assumption that each image from the radar comes six minutes after the previous one
+// assumption that each image from the radar comes five minutes after the previous one
 pub fn clean() {
     let file_error = "Error reading file system";
 
@@ -242,11 +242,7 @@ pub fn clean() {
             if i + 1 != file_names.len() {
                 // Look ahead 1
                 let file = &file_names[i + 1];
-                if del > 0 {
-                    del += 1;
-                    print!("\r({:02}) Deleting: {:?}", del, prev);
-                    fs::remove_file(prev).expect(file_error);
-                } else if !consecutive_files(prev, file) {
+                if del > 0 || !consecutive_files(prev, file) {
                     del += 1;
                     print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
@@ -290,7 +286,7 @@ fn timecode_from_path(name: &std::path::Path) -> Timecode {
 }
 
 // Returns true if the two files given are consecutive, in that the timecodes contained
-// in the file names are 6 minutes apart
+// in the file names are 5 minutes apart
 fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     // Convert filenames to timecodes
     let prev = timecode_from_path(prev);
@@ -299,8 +295,8 @@ fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     // Chain through the different levels of time timecode
     // Not entirely sure that every level works but it at least works across
     // Hour boundaries so for the most part is ok
-    if prev.min + 6 == next.min
-        || (next.min <= 6 && prev.hour + 1 == next.hour)
+    if prev.min + 5 == next.min
+        || (next.min <= 5 && prev.hour + 1 == next.hour)
         || (next.hour == 0 && prev.day + 1 == next.day)
         || (next.day == 0 && prev.month + 1 == next.month)
     {
