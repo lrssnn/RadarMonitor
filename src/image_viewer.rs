@@ -44,12 +44,14 @@ pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
 
     // This file should probably think about the time, and the renderable itself should know how to make that
     // an offset...
-    let mut timer_offset = 0.0;
+    let mut progress_translation = -1.0;
+    let mut progress_scale = 0.0;
 
     events_loop.run(move |ev, _, control_flow| {
         // Check channel for update
         if let Ok(offset) = receiver.try_recv(){
-            timer_offset = (offset * 2.0) - 1.0;
+            progress_scale = offset;
+            progress_translation = offset - 1.0;
         }
 
         if let glium::glutin::event::Event::WindowEvent { event, .. } = ev {
@@ -107,7 +109,7 @@ pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
         renderer.draw(&mut lc_renderables[zoom]);
         renderer.draw(&mut renderables[zoom][index]);
 
-        renderer.draw_with_offset(&mut state, timer_offset);
+        renderer.draw_with_offset(&mut state, progress_translation, progress_scale);
 
         renderer.finish_frame();
 

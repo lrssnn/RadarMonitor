@@ -1,5 +1,6 @@
 extern crate ftp;
 
+use ftp::FtpError;
 use ftp::FtpStream;
 use std;
 use std::fs;
@@ -51,6 +52,7 @@ pub fn save_files() -> ftp::types::Result<()> {
 
     // Find out which files are currently on the server
     let filenames = ftp_stream.nlst(Option::None)?;
+    let mut downloaded_anything = false;
 
     for lc_code in &[CODE_LOW, CODE_MID, CODE_HIGH] {
         let mut downloads = 0;
@@ -69,6 +71,8 @@ pub fn save_files() -> ftp::types::Result<()> {
             if File::open(DL_DIR.to_string() + lc_code + "/" + &file_name).is_ok() {
                 continue;
             }
+
+            downloaded_anything = true;
 
             // Print a message (one line only regardless of number of files)
             print!("\r({:02}) downloading '{}...'", downloads + 1, file_name);
@@ -95,7 +99,11 @@ pub fn save_files() -> ftp::types::Result<()> {
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
-    Ok(())
+    if downloaded_anything {
+        Ok(())
+    } else {
+        Err(FtpError::InvalidResponse("No new items :)".to_string()))
+    }
 }
 
 // Wait for 'mins' minutes while printing a report of how long remains.

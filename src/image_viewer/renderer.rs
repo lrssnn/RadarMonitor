@@ -99,7 +99,7 @@ impl Renderer {
         }
     }
 
-    pub(crate) fn draw_with_offset(&mut self, item: &mut Renderable, offset: f32) {
+    pub(crate) fn draw_with_offset(&mut self, item: &mut Renderable, translation: f32, scale: f32) {
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
             ..Default::default()
@@ -107,7 +107,8 @@ impl Renderer {
 
         if let Some(target) = &mut self.target {
             let mut matrix = item.matrix;
-            matrix[3][0] = offset;
+            matrix[0][0] = scale;
+            matrix[3][0] = translation;
             target
                 .draw(
                     &self.vb,
