@@ -6,7 +6,8 @@ use super::DL_DIR;
 
 pub enum RenderableType {
     MainImage,
-    BottomSlice,
+    UpperUI,
+    BottomUI,
 }
 
 fn get_type_matrix(t: RenderableType) -> [[f32; 4]; 4] {
@@ -17,7 +18,8 @@ fn get_type_matrix(t: RenderableType) -> [[f32; 4]; 4] {
         RenderableType::MainImage => ((1.0, 0.80), (0.0, 0.2)),
         // vertical offset is 256 pixels which is 80% (0.8) of the 640 window height
         // 1 percent of the horizontal width
-        RenderableType::BottomSlice => ((0.01, 0.20), (-1.0, -0.8)),
+        RenderableType::UpperUI => ((0.01, 0.10), (-1.0, -0.7)),
+        RenderableType::BottomUI => ((0.01, 0.10), (-1.0, -0.9))
     };
 
     [

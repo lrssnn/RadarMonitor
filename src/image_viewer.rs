@@ -38,21 +38,26 @@ pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
     let (mut renderer, events_loop) = Renderer::new();
     let (mut bg_renderables, mut lc_renderables) = background_init();
     let mut renderables = create_all_renderables_from_files();
-    let mut state = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::BottomSlice);
+    let mut upperUI = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::UpperUI);
+    let mut bottomUI = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::BottomUI);
     let frame_time_nano = (frame_time * 1000000) as u64;
     let mut next_frame_time = Instant::now() + Duration::from_nanos(frame_time_nano);
 
     // This file should probably think about the time, and the renderable itself should know how to make that
-    // an offset...
-    let mut progress_translation = -1.0;
-    let mut progress_scale = 0.0;
+    // an offset..
+    let mut images_progress = 0.0;
+    let mut timer_progress = 0.0;
 
     events_loop.run(move |ev, _, control_flow| {
         // Check channel for update
-        if let Ok(offset) = receiver.try_recv(){
-            progress_scale = offset;
-            progress_translation = offset - 1.0;
+        if let Ok(timer) = receiver.try_recv(){
+            timer_progress = timer;
         }
+
+        // Calculate our progress through the image set
+        let end = renderables[zoom].len();
+        let progress = index as f32 / end as f32;
+        images_progress = progress;
 
         if let glium::glutin::event::Event::WindowEvent { event, .. } = ev {
             match event {
@@ -109,7 +114,8 @@ pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
         renderer.draw(&mut lc_renderables[zoom]);
         renderer.draw(&mut renderables[zoom][index]);
 
-        renderer.draw_with_offset(&mut state, progress_translation, progress_scale);
+        renderer.draw_progress_bar(&mut upperUI, images_progress);
+        renderer.draw_progress_bar(&mut bottomUI, timer_progress);
 
         renderer.finish_frame();
 

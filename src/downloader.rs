@@ -29,7 +29,7 @@ struct Timecode {
 
 pub fn run_loop(sender: Sender<f32>) -> Result<(), ()> {
     loop {
-        // Wait for 5 minutes, then check the server every minute until we get at least
+        // Wait for 4 minutes, then check the server every minute until we get at least
         // 1 new file
         wait_mins(4, &sender);
 

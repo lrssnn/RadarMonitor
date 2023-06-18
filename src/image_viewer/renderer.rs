@@ -99,12 +99,14 @@ impl Renderer {
         }
     }
 
-    pub(crate) fn draw_with_offset(&mut self, item: &mut Renderable, translation: f32, scale: f32) {
+    pub(crate) fn draw_progress_bar(&mut self, item: &mut Renderable, progress: f32) {
         let params = DrawParameters {
             blend: Blend::alpha_blending(),
             ..Default::default()
         };
 
+        let scale = progress;
+        let translation = progress - 1.0;
         if let Some(target) = &mut self.target {
             let mut matrix = item.matrix;
             matrix[0][0] = scale;
