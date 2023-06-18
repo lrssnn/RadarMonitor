@@ -38,8 +38,8 @@ pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
     let (mut renderer, events_loop) = Renderer::new();
     let (mut bg_renderables, mut lc_renderables) = background_init();
     let mut renderables = create_all_renderables_from_files();
-    let mut upperUI = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::UpperUI);
-    let mut bottomUI = Renderable::from_disk_image("C:\\Users\\nikla\\Pictures\\Untitled.png", RenderableType::BottomUI);
+    let mut upperUI = Renderable::from_disk_image("blue.jpg", RenderableType::UpperUI);
+    let mut bottomUI = Renderable::from_disk_image("salmon.png", RenderableType::BottomUI);
     let frame_time_nano = (frame_time * 1000000) as u64;
     let mut next_frame_time = Instant::now() + Duration::from_nanos(frame_time_nano);
 
