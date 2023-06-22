@@ -1,5 +1,6 @@
 extern crate ftp;
 
+use ftp::FtpError;
 use ftp::FtpStream;
 use std;
 use std::fs;
@@ -7,12 +8,13 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::str;
 use std::str::FromStr;
+use std::sync::mpsc::Sender;
 use std::thread::sleep;
 use std::time::Duration;
 
+use super::CODE_HIGH;
 use super::CODE_LOW;
 use super::CODE_MID;
-use super::CODE_HIGH;
 use super::DL_DIR;
 
 //Simple timecode struct used to determine file contiguousness
@@ -25,14 +27,14 @@ struct Timecode {
     min: usize,
 }
 
-pub fn run_loop() -> Result<(), ()> {
+pub fn run_loop(sender: Sender<f32>) -> Result<(), ()> {
     loop {
-        // Wait for 5 minutes, then check the server every minute until we get at least
+        // Wait for 4 minutes, then check the server every minute until we get at least
         // 1 new file
-        wait_mins(5);
+        wait_mins(4, &sender);
 
         while save_files().is_err() {
-            wait_mins(1)
+            wait_mins(1, &sender)
         }
     }
 }
@@ -50,6 +52,7 @@ pub fn save_files() -> ftp::types::Result<()> {
 
     // Find out which files are currently on the server
     let filenames = ftp_stream.nlst(Option::None)?;
+    let mut downloaded_anything = false;
 
     for lc_code in &[CODE_LOW, CODE_MID, CODE_HIGH] {
         let mut downloads = 0;
@@ -69,8 +72,10 @@ pub fn save_files() -> ftp::types::Result<()> {
                 continue;
             }
 
+            downloaded_anything = true;
+
             // Print a message (one line only regardless of number of files)
-            print!("\r({:02}) Choosing to download '{}'", downloads + 1, file_name);
+            print!("\r({:02}) downloading '{}...'", downloads + 1, file_name);
             std::io::stdout().flush().expect("Error flushing stdout");
 
             // Get the file from the server
@@ -94,18 +99,27 @@ pub fn save_files() -> ftp::types::Result<()> {
 
     // Disconnect from the server
     let _ = ftp_stream.quit();
-    Ok(())
+    if downloaded_anything {
+        Ok(())
+    } else {
+        Err(FtpError::InvalidResponse("No new items :)".to_string()))
+    }
 }
 
 // Wait for 'mins' minutes while printing a report of how long remains.
-pub fn wait_mins(mins: usize) {
-    let mut secs = mins * 60;
+pub fn wait_mins(mins: usize, sender: &Sender<f32>) {
+    let max_secs = mins * 60;
+    let mut secs = max_secs;
 
     let one_sec = Duration::new(1, 0);
 
     while secs > 0 {
         print!("\rWaiting {} seconds...     ", secs);
         std::io::stdout().flush().expect("Error flushing stdout");
+
+        // How far through the wait time from 0.0 -> 1.0
+        let wait_scale = 1.0 - (secs as f32 / max_secs as f32);
+        sender.send(wait_scale).expect("Sending fail");
 
         sleep(one_sec);
 
@@ -217,14 +231,13 @@ fn mark_files_as_new(location_code: &str) {
 
 // Removes non-contiguous files from each image directory
 // i.e. leaves only the most recent streak of contiguous images based on the
-// assumption that each image from the radar comes six minutes after the previous one
+// assumption that each image from the radar comes five minutes after the previous one
 pub fn clean() {
     let file_error = "Error reading file system";
 
-    let dirs;
     // If DL_DIR doesn't exist, there is nothing to clean
-    match fs::read_dir(DL_DIR) {
-        Ok(d) => dirs = d,
+    let dirs = match fs::read_dir(DL_DIR) {
+        Ok(d) => d,
         Err(_) => return,
     };
 
@@ -243,11 +256,7 @@ pub fn clean() {
             if i + 1 != file_names.len() {
                 // Look ahead 1
                 let file = &file_names[i + 1];
-                if del > 0 {
-                    del += 1;
-                    print!("\r({:02}) Deleting: {:?}", del, prev);
-                    fs::remove_file(prev).expect(file_error);
-                } else if !consecutive_files(prev, file) {
+                if del > 0 || !consecutive_files(prev, file) {
                     del += 1;
                     print!("\r({:02}) Deleting: {:?}", del, prev);
                     fs::remove_file(prev).expect(file_error);
@@ -291,7 +300,7 @@ fn timecode_from_path(name: &std::path::Path) -> Timecode {
 }
 
 // Returns true if the two files given are consecutive, in that the timecodes contained
-// in the file names are 6 minutes apart
+// in the file names are 5 minutes apart
 fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     // Convert filenames to timecodes
     let prev = timecode_from_path(prev);
@@ -300,8 +309,8 @@ fn consecutive_files(prev: &std::path::Path, next: &std::path::Path) -> bool {
     // Chain through the different levels of time timecode
     // Not entirely sure that every level works but it at least works across
     // Hour boundaries so for the most part is ok
-    if prev.min + 6 == next.min
-        || (next.min <= 6 && prev.hour + 1 == next.hour)
+    if prev.min + 5 == next.min
+        || (next.min <= 5 && prev.hour + 1 == next.hour)
         || (next.hour == 0 && prev.day + 1 == next.day)
         || (next.day == 0 && prev.month + 1 == next.month)
     {

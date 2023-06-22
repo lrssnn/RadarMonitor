@@ -1,9 +1,5 @@
+use std::sync::mpsc::Receiver;
 use super::glium;
-use glium::index::PrimitiveType;
-use glium::texture::{RawImage2d, Texture2d};
-use glium::{IndexBuffer, Surface, VertexBuffer};
-
-use glium::draw_parameters::{Blend, DrawParameters};
 use glium::DrawError;
 
 use glium::glutin::event::ElementState;
@@ -11,15 +7,18 @@ use glium::glutin::event::KeyboardInput;
 use glium::glutin::event::VirtualKeyCode as Key;
 use glium::glutin::event::WindowEvent;
 use glium::glutin::event_loop::ControlFlow;
-use glium::glutin::event_loop::EventLoop;
-
-use glium::uniforms::{EmptyUniforms, UniformsStorage};
 
 use std::fs;
 use std::iter::Iterator;
 use std::str;
 use std::time::Duration;
 use std::time::Instant;
+
+mod renderable;
+mod renderer;
+use image_viewer::renderable::Renderable;
+use image_viewer::renderable::RenderableType;
+use image_viewer::renderer::Renderer;
 
 use super::CODE_HIGH;
 use super::CODE_LOW;
@@ -29,59 +28,32 @@ use super::SPEED_FAST;
 use super::SPEED_MID;
 use super::SPEED_SLOW;
 
-extern crate image;
-
-#[derive(Copy, Clone)]
-struct Vertex {
-    position: [f32; 2],
-    texture_pos: [f32; 2],
-}
-
-implement_vertex!(Vertex, position, texture_pos);
-
-// Constants to define the vertices of the square
-const VERTICES: [Vertex; 4] = [
-    Vertex {
-        position: [-1.0, 1.0],
-        texture_pos: [0.0, 1.0],
-    },
-    Vertex {
-        position: [-1.0, -1.0],
-        texture_pos: [0.0, 0.0],
-    },
-    Vertex {
-        position: [1.0, 1.0],
-        texture_pos: [1.0, 1.0],
-    },
-    Vertex {
-        position: [1.0, -1.0],
-        texture_pos: [1.0, 0.0],
-    },
-];
-
-const INDICES: [u16; 6] = [0, 2, 1, 1, 3, 2];
-
 // Opens a new window, displaying only the files that currently exist in img
-pub fn open_window() -> Result<(), DrawError> {
+pub fn open_window(receiver: Receiver<f32>) -> Result<(), DrawError> {
     let mut index = 0;
     let mut zoom = 1;
     let mut frame_time = SPEED_MID;
 
     // Do a bunch of init garbage
-    let (display, events_loop) = create_display();
-    let (bg_textures, lc_textures) = background_init(&display);
-    let program = link_shader(&display);
-    let (vb, ib) = create_buffers(&display);
-    let mut textures = create_all_textures_from_files(&display);
+    let (mut renderer, events_loop) = Renderer::new();
+    let (mut bg_renderables, mut lc_renderables) = background_init();
+    let mut renderables = create_all_renderables_from_files();
+    let mut upper_ui = Renderable::from_disk_image("blue.jpg", RenderableType::UpperUI);
+    let mut bottom_ui = Renderable::from_disk_image("salmon.png", RenderableType::BottomUI);
     let frame_time_nano = (frame_time * 1000000) as u64;
     let mut next_frame_time = Instant::now() + Duration::from_nanos(frame_time_nano);
 
-    let params = DrawParameters {
-        blend: Blend::alpha_blending(),
-        ..Default::default()
-    };
+    // This file should probably think about the time, and the renderable itself should know how to make that
+    // an offset..
+    let mut timer_progress = 0.0;
 
     events_loop.run(move |ev, _, control_flow| {
+        // Check channel for update
+        if let Ok(timer) = receiver.try_recv(){
+            timer_progress = timer;
+        }
+
+
         if let glium::glutin::event::Event::WindowEvent { event, .. } = ev {
             match event {
                 WindowEvent::CloseRequested => {
@@ -101,17 +73,17 @@ pub fn open_window() -> Result<(), DrawError> {
                     Key::Up => frame_time = change_speed(frame_time, true),
                     Key::LBracket | Key::End => {
                         zoom = change_zoom(zoom, false);
-                        if textures[zoom].len() <= index {
+                        if renderables[zoom].len() <= index {
                             index = 0;
                         };
                     }
                     Key::RBracket | Key::Home => {
                         zoom = change_zoom(zoom, true);
-                        if textures[zoom].len() <= index {
+                        if renderables[zoom].len() <= index {
                             index = 0;
                         }
                     }
-                    Key::Escape => {
+                    Key::Escape | Key::Q => {
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
@@ -131,44 +103,24 @@ pub fn open_window() -> Result<(), DrawError> {
 
         *control_flow = ControlFlow::WaitUntil(next_frame_time);
 
-        // Grab the display and clear it
-        let mut target = display.draw();
-        target.clear_color(0.0, 0.0, 0.0, 0.0);
-
+        renderer.new_frame();
         // Draw the background, then map overlay, then radar data
-        target
-            .draw(
-                &vb,
-                &ib,
-                &program,
-                &uniform_tex(&bg_textures[zoom]),
-                &params,
-            )
-            .expect("Error drawing BG");
-        target
-            .draw(
-                &vb,
-                &ib,
-                &program,
-                &uniform_tex(&lc_textures[zoom]),
-                &params,
-            )
-            .expect("Error drawing Overlay");
-        target
-            .draw(
-                &vb,
-                &ib,
-                &program,
-                &uniform_tex(&textures[zoom][index]),
-                &params,
-            )
-            .expect("Error drawing data");
+        renderer.draw(&mut bg_renderables[zoom]);
+        renderer.draw(&mut lc_renderables[zoom]);
+        renderer.draw(&mut renderables[zoom][index]);
 
-        target.finish().expect("Frame Finishing Error");
+        // Calculate our progress through the image set
+        let end = renderables[zoom].len();
+        let images_progress = index as f32 / end as f32;
+
+        renderer.draw_progress_bar(&mut upper_ui, images_progress);
+        renderer.draw_progress_bar(&mut bottom_ui, timer_progress);
+
+        renderer.finish_frame();
 
         // Next image (with wraparound)
         index = {
-            if index + 1 < textures[zoom].len() {
+            if index + 1 < renderables[zoom].len() {
                 index + 1
             } else {
                 0
@@ -177,47 +129,9 @@ pub fn open_window() -> Result<(), DrawError> {
 
         // Check for new images if we just wrapped around
         if index == 0 {
-            add_all_new_textures(&display, &mut textures);
+            add_all_new_renderables(&mut renderables);
         }
     })
-}
-
-// Just a wrapper to be more readable at the draw call.
-fn uniform_tex(tex: &Texture2d) -> UniformsStorage<&Texture2d, EmptyUniforms> {
-    uniform! {
-        tex: tex
-    }
-}
-
-// Open a window and return the display and the associated events loop
-fn create_display() -> (glium::Display, EventLoop<()>) {
-    let events_loop = EventLoop::new();
-
-    let window = glium::glutin::window::WindowBuilder::new()
-        .with_inner_size(glium::glutin::dpi::PhysicalSize::new(512, 512))
-        .with_title("Radar Monitor");
-
-    let context = glium::glutin::ContextBuilder::new();
-
-    let display =
-        glium::Display::new(window, context, &events_loop).expect("Failed to create display");
-
-    (display, events_loop)
-}
-
-fn link_shader(display: &glium::Display) -> glium::Program {
-    const VERT_SHADER: &str = include_str!("res/shader.vert");
-    const FRAG_SHADER: &str = include_str!("res/shader.frag");
-    glium::Program::from_source(display, VERT_SHADER, FRAG_SHADER, None)
-        .expect("Error creating shader program")
-}
-
-fn create_buffers(display: &glium::Display) -> (VertexBuffer<Vertex>, IndexBuffer<u16>) {
-    let vb = VertexBuffer::new(display, &VERTICES).expect("Error creating vertex buffer");
-    let ib = IndexBuffer::new(display, PrimitiveType::TrianglesList, &INDICES)
-        .expect("Error creating index buffer");
-
-    (vb, ib)
 }
 
 fn change_zoom(zoom: usize, faster: bool) -> usize {
@@ -251,80 +165,39 @@ fn change_speed(current: usize, increase: bool) -> usize {
 }
 
 // Create background and location texture arrays. Just to clean up init in main function
-fn background_init(display: &glium::Display) -> ([Texture2d; 3], [Texture2d; 3]) {
+fn background_init() -> ([Renderable; 3], [Renderable; 3]) {
     // What is formatting
     (
         [
-            texture_from_image(display, &(CODE_LOW.to_string() + ".background.png")),
-            texture_from_image(display, &(CODE_MID.to_string() + ".background.png")),
-            texture_from_image(display, &(CODE_HIGH.to_string() + ".background.png")),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".background.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".background.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".background.png"), RenderableType::MainImage),
         ],
         [
-            texture_from_image(display, &(CODE_LOW.to_string() + ".locations.png")),
-            texture_from_image(display, &(CODE_MID.to_string() + ".locations.png")),
-            texture_from_image(display, &(CODE_HIGH.to_string() + ".locations.png")),
+            Renderable::from_disk_image(&(CODE_LOW.to_string() + ".locations.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_MID.to_string() + ".locations.png"), RenderableType::MainImage),
+            Renderable::from_disk_image(&(CODE_HIGH.to_string() + ".locations.png"), RenderableType::MainImage),
         ],
     )
 }
 
-fn create_all_textures_from_files(display: &glium::Display) -> [Vec<Texture2d>; 3] {
-    let start = Instant::now();
-
-    let textures = [
-        create_textures_from_files(display, CODE_LOW),
-        create_textures_from_files(display, CODE_MID),
-        create_textures_from_files(display, CODE_HIGH),
-    ];
-
-    let end = Instant::now();
-    let time = end.duration_since(start).as_millis();
-    let num_textures = (textures[0].len() + textures[1].len() + textures[2].len()) as u128;
-    let texture_millis = time / num_textures;
-
-    println!(
-        "Created {} textures in {}ms ({} ms/texture)",
-        num_textures, time, texture_millis
-    );
-
-    textures
+fn create_all_renderables_from_files() -> [Vec<Renderable>; 3] {
+    [
+        Renderable::from_location_folder(CODE_LOW),
+        Renderable::from_location_folder(CODE_MID),
+        Renderable::from_location_folder(CODE_HIGH),
+    ]
 }
 
-fn create_textures_from_files(display: &glium::Display, lc_code: &str) -> Vec<Texture2d> {
+fn add_all_new_renderables(vecs: &mut [Vec<Renderable>; 3]) {
+    add_new_renderables(&mut vecs[0], CODE_LOW);
+    add_new_renderables(&mut vecs[1], CODE_MID);
+    add_new_renderables(&mut vecs[2], CODE_HIGH);
+}
+
+fn add_new_renderables(vec: &mut Vec<Renderable>, lc_code: &str) {
     let dir = &(DL_DIR.to_string() + lc_code + "/");
     let files = fs::read_dir(dir).expect("Error reading image directory");
-    let mut file_names: Vec<_> = files
-        .map(|e| {
-            e.expect("Error reading image filename")
-                .file_name()
-                .into_string()
-                .expect("Error extracting image filename")
-        })
-        .collect();
-
-    file_names.sort();
-
-    file_names
-        .iter()
-        .map(|e| {
-            let r = texture_from_image(display, &(dir.to_string() + e));
-            let mut new_name = e.clone();
-            new_name.remove(0);
-            fs::rename(&(dir.to_string() + e), &(dir.to_string() + &new_name))
-                .expect("Error renaming file");
-            r
-        })
-        .collect()
-}
-
-fn add_all_new_textures(display: &glium::Display, vecs: &mut [Vec<Texture2d>; 3]) {
-    add_new_textures(display, &mut vecs[0], CODE_LOW);
-    add_new_textures(display, &mut vecs[1], CODE_MID);
-    add_new_textures(display, &mut vecs[2], CODE_HIGH);
-}
-
-fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code: &str) {
-    let dir = &(DL_DIR.to_string() + lc_code + "/");
-    let files = fs::read_dir(&dir).expect("Error reading image directory");
 
     let file_names: Vec<_> = files
         .map(|e| {
@@ -343,25 +216,16 @@ fn add_new_textures(display: &glium::Display, vec: &mut Vec<Texture2d>, lc_code:
     file_names.sort();
 
     for file_name in file_names {
-        vec.push(texture_from_image(display, &(dir.to_string() + file_name)));
         let mut new_name = file_name.clone();
         new_name.remove(0);
+        vec.push(Renderable::from_disk_image(
+            &(dir.to_string() + &new_name),
+            RenderableType::MainImage,
+        ));
         fs::rename(
             &(dir.to_string() + file_name),
             &(dir.to_string() + &new_name),
         )
         .expect("Error renaming file");
     }
-}
-
-fn texture_from_image(display: &glium::Display, img: &str) -> Texture2d {
-    let image = image::open(img)
-        .expect("Error opening image file")
-        .to_rgba8();
-
-    let image_dim = image.dimensions();
-
-    let image = RawImage2d::from_raw_rgba_reversed(&image.into_raw(), image_dim);
-
-    Texture2d::new(display, image).expect("Error creating texture from image")
 }
